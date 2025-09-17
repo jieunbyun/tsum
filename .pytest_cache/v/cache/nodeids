@@ -1,0 +1,6 @@
+[
+  "tests/test_tsum.py::test_update_rules1",
+  "tests/test_tsum.py::test_update_rules2",
+  "tests/test_tsum.py::test_update_rules3",
+  "tests/test_tsum.py::test_update_rules4"
+]
