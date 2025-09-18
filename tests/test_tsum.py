@@ -1130,3 +1130,78 @@ def test_update_rules4(ex_surv_fail_rules_with_dict):
 
     assert rules_dict == expected_rules_dict, f"Expected {expected_rules_dict}, but got {rules_dict}"
     assert torch.equal(rules_mat, expected_rules_mat), f"Expected {expected_rules_mat}, but got {rules_mat}"
+
+@pytest.fixture
+def surv_fail_rules_ex_4comps():
+    surv_rules = [{'x1': ('>=', 1), 'x2': ('>=', 2), 'x3': ('>=', 1), 'x4': ('>=', 2), 'sys': ('>=', 1)},
+                  {'x1': ('>=', 2), 'x2': ('>=', 1), 'x3': ('>=', 2), 'x4': ('>=', 1), 'sys': ('>=', 1)}]
+    fail_rules = [{'x1': ('<=', 0), 'sys': ('<=', 0)},
+                  {'x1': ('<=', 1), 'x2': ('<=', 1), 'sys': ('<=', 0)},
+                  {'x1': ('<=', 1), 'x4': ('<=', 1), 'sys': ('<=', 0)},
+                  {'x3': ('<=', 1), 'x4': ('<=', 1), 'sys': ('<=', 0)},
+                  {'x2': ('<=', 1), 'x3': ('<=', 1), 'sys': ('<=', 0)},
+                  {'x2': ('<=', 0), 'sys': ('<=', 0)},
+                  {'x3': ('<=', 0), 'sys': ('<=', 0)},
+                  {'x4': ('<=', 0), 'sys': ('<=', 0)}]
+    
+    row_names = ['x1', 'x2', 'x3', 'x4', 'sys']
+
+    return surv_rules, fail_rules, row_names
+
+def test_minimise_surv_states_random1(surv_fail_rules_ex_4comps):
+    surv_rules, fail_rules, row_names = surv_fail_rules_ex_4comps
+
+    comps_st = {x: 2 for x in row_names if x != 'sys'}
+
+    def sfun(comps_st):
+        for s in surv_rules:
+            if all(comps_st[k] >= v[1] for k, v in s.items() if k != 'sys'):
+                return None, 's', None
+        return None, 'f', None
+
+    new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, 1)
+    assert new_rule in surv_rules, f"Expected one of {surv_rules}, but got {new_rule}"
+
+def test_minimise_surv_states_random2(surv_fail_rules_ex_4comps):
+    surv_rules, fail_rules, row_names = surv_fail_rules_ex_4comps
+
+    comps_st = {x: 2 for x in row_names if x != 'sys'}
+    comps_st['x1'] = 1
+
+    def sfun(comps_st):
+        for s in surv_rules:
+            if all(comps_st[k] >= v[1] for k, v in s.items() if k != 'sys'):
+                return None, 's', None
+        return None, 'f', None
+
+    new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, 1)
+    assert new_rule in surv_rules, f"Expected one of {surv_rules}, but got {new_rule}"
+
+def test_minimise_fail_states_random1(surv_fail_rules_ex_4comps):
+    surv_rules, fail_rules, row_names = surv_fail_rules_ex_4comps
+
+    comps_st = {x: 0 for x in row_names if x != 'sys'}
+
+    def sfun(comps_st):
+        for s in surv_rules:
+            if all(comps_st[k] >= v[1] for k, v in s.items() if k != 'sys'):
+                return None, 's', None
+        return None, 'f', None
+
+    new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, max_state = 2, sys_fail_st = 0)
+    assert new_rule in fail_rules, f"Got {new_rule}"
+
+def test_minimise_fail_states_random2(surv_fail_rules_ex_4comps):
+    surv_rules, fail_rules, row_names = surv_fail_rules_ex_4comps
+
+    comps_st = {x: 0 for x in row_names if x != 'sys'}
+    comps_st['x1'] = 1
+
+    def sfun(comps_st):
+        for s in surv_rules:
+            if all(comps_st[k] >= v[1] for k, v in s.items() if k != 'sys'):
+                return None, 's', None
+        return None, 'f', None
+
+    new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, max_state = 2, sys_fail_st = 0)
+    assert new_rule in fail_rules, f"Got {new_rule}"

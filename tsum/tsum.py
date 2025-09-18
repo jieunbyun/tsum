@@ -2,12 +2,25 @@ import torch
 import itertools
 from itertools import product, combinations
 from math import prod
+import math
+from decimal import Decimal
 import numpy as np
 import os, json, time
-from typing import Callable, Dict, Any, List, Optional, Tuple, Sequence
+from typing import Callable, Dict, Any, List, Optional, Tuple, Sequence, Iterable
 from torch import Tensor
 
+import random
+from collections import deque
+
 import tsum
+
+# For use in mixted sorting 
+try:
+    import numpy as np
+    _NUMPY_NUM = (np.integer, np.floating)
+except Exception:
+    _NUMPY_NUM = tuple()
+# -----
 
 
 def get_min_fail_comps_st(comps_st, max_st, sys_fail_st):
@@ -44,6 +57,199 @@ def get_min_surv_comps_st(comps_st, sys_surv_st):
     min_comps_st = {k: ('>=', v) for k, v in comps_st.items() if v > 0}
     min_comps_st['sys'] = ('>=', sys_surv_st)
     return min_comps_st
+
+def minimise_surv_states_random(
+    comps_st: Dict[str, int],
+    sfun,
+    sys_surv_st: int,
+    *,
+    min_state: int = 0,
+    step: int = 1,
+    seed: Optional[int] = None,
+    exclude_keys: Iterable[str] = ("sys",)
+) -> Tuple[Dict[str, int], Dict[str, Any]]:
+    """
+    Random greedy reduction of component states.
+
+    Algorithm (given a random permutation of components):
+      - Try lowering each component by `step` (e.g., 1).
+      - Call sfun(modified_state).
+        Expect sfun to return a tuple where the 2nd element is 's' or 'f'.
+      - If status == 's': keep the lowered value and continue cycling.
+        If the component reaches `min_state`, remove it (can't lower further).
+      - If status == 'f': revert the change and remove that component (no further attempts).
+
+    Stops when all components have been removed from the candidate pool.
+
+    Returns:
+      final_state, info
+        - final_state: dict of the minimized states.
+        - info: {
+            'permutation': [...],
+            'removed_on_failure': [comp,...],
+            'hit_min_state': [comp,...],
+            'attempts': int,
+          }
+    """
+    rng = random.Random(seed)
+
+    # Work on a copy; do NOT mutate caller's dict
+    state = dict(comps_st)
+
+    # Build candidate deque from a random permutation
+    candidates = [k for k, v in state.items()
+                  if k not in set(exclude_keys) and isinstance(v, int) and v > min_state]
+    rng.shuffle(candidates)
+    dq = deque(candidates)
+
+    removed_on_failure = []
+    hit_min_state = []
+    attempts = 0
+
+    while dq:
+        comp = dq[0]
+
+        # If already at/below min_state, remove and continue
+        if state.get(comp, min_state) <= min_state:
+            dq.popleft()
+            hit_min_state.append(comp)
+            continue
+
+        prev = state[comp]
+        state[comp] = prev - step
+        attempts += 1
+
+        # Expect sfun to return (value, 's'/'f', info) or similar
+        try:
+            status = sfun(state)[1]
+        except Exception as e:
+            # If your sfun has a different signature, surface the error clearly
+            state[comp] = prev  # revert
+            dq.popleft()
+            removed_on_failure.append(comp)
+            continue
+
+        if status == 's':
+            # Keep lowered value
+            if state[comp] <= min_state:
+                dq.popleft()
+                hit_min_state.append(comp)
+            else:
+                dq.rotate(-1)  # move to back; try again later
+        else:
+            # Revert and remove from further consideration
+            state[comp] = prev
+            dq.popleft()
+            removed_on_failure.append(comp)
+
+    info = {
+        'permutation': candidates,
+        'removed_on_failure': removed_on_failure,
+        'hit_min_state': hit_min_state,
+        'attempts': attempts,
+        'final_state': state
+    }
+
+    min_rule = get_min_surv_comps_st(state, sys_surv_st)
+
+    return min_rule, info
+
+def minimise_fail_states_random(
+    comps_st: Dict[str, int],
+    sfun,
+    max_state: int,
+    *,
+    sys_fail_st: int = 0,
+    step: int = 1,
+    seed: Optional[int] = None,
+    exclude_keys: Iterable[str] = ("sys",)
+) -> Tuple[Dict[str, int], Dict[str, Any]]:
+    """
+    Random greedy reduction of component states.
+
+    Algorithm (given a random permutation of components):
+      - Try increasing each component by `step` (e.g., 1).
+      - Call sfun(modified_state).
+        Expect sfun to return a tuple where the 2nd element is 's' or 'f'.
+      - If status == 'f': keep the increased value and continue cycling.
+        If the component reaches `max_state`, remove it (can't increase further).
+      - If status == 's': revert the change and remove that component (no further attempts).
+
+    Stops when all components have been removed from the candidate pool.
+
+    Returns:
+      final_state, info
+        - final_state: dict of the minimized states.
+        - info: {
+            'permutation': [...],
+            'removed_on_failure': [comp,...],
+            'hit_min_state': [comp,...],
+            'attempts': int,
+            'final_state': {comp: state,...}
+          }
+    """
+    rng = random.Random(seed)
+
+    # Work on a copy; do NOT mutate caller's dict
+    state = dict(comps_st)
+
+    # Build candidate deque from a random permutation
+    candidates = [k for k, v in state.items()
+                  if k not in set(exclude_keys) and isinstance(v, int) and v < max_state]
+    rng.shuffle(candidates)
+    dq = deque(candidates)
+
+    removed_on_survival = []
+    hit_min_state = []
+    attempts = 0
+
+    while dq:
+        comp = dq[0]
+
+        # If already at/below min_state, remove and continue
+        if state.get(comp, max_state) >= max_state:
+            dq.popleft()
+            hit_min_state.append(comp)
+            continue
+
+        prev = state[comp]
+        state[comp] = prev + step
+        attempts += 1
+
+        # Expect sfun to return (value, 's'/'f', info) or similar
+        try:
+            status = sfun(state)[1]
+        except Exception as e:
+            # If your sfun has a different signature, surface the error clearly
+            state[comp] = prev  # revert
+            dq.popleft()
+            removed_on_survival.append(comp)
+            continue
+
+        if status == 'f':
+            # Keep increased value
+            if state[comp] >= max_state:
+                dq.popleft()
+                hit_min_state.append(comp)
+            else:
+                dq.rotate(-1)  # move to back; try again later
+        else:
+            # Revert and remove from further consideration
+            state[comp] = prev
+            dq.popleft()
+            removed_on_survival.append(comp)
+
+    info = {
+        'permutation': candidates,
+        'removed_on_survival': removed_on_survival,
+        'hit_min_state': hit_min_state,
+        'attempts': attempts,
+        'final_state': state
+    }
+
+    min_rule = get_min_fail_comps_st(state, max_state, sys_fail_st)
+
+    return min_rule, info
 
 def from_rule_dict_to_mat(rule_dict, row_names, max_st):
     """
@@ -1229,6 +1435,7 @@ def run_rule_extraction(
     sample_batch_size: int = 1_000_000,
     rule_search_batch_size: int = 1_024,    # sampler batch for candidate rule search
     rule_search_max_iters: int = 10,
+    min_rule_search: bool = True, # May be opted out for expensive sfun
     # Display / verbose
     rule_update_verbose: bool = True,
     # Output control
@@ -1236,7 +1443,8 @@ def run_rule_extraction(
     surv_json_name: str = "rules_surv.json",
     fail_json_name: str = "rules_fail.json",
     surv_pt_name: str = "rules_surv.pt",
-    fail_pt_name: str = "rules_fail.pt"
+    fail_pt_name: str = "rules_fail.pt",
+    metrics_path: str = "metrics.jsonl",
 ) -> Dict[str, Any]:
     """
     Runs the survival/failure rule discovery loop (steps 3 & 4 only),
@@ -1276,6 +1484,37 @@ def run_rule_extraction(
     def _save_pt(t: torch.Tensor, path: str) -> None:
         torch.save(t.detach().cpu(), path)
 
+    def _mixed_sort_key(x):
+        """
+        Order: numbers ↑, then strings a→z, then None.
+        - Numbers include: int, float, Decimal, NumPy integer/floating scalars.
+        - NaN is placed at the end of the numeric block.
+        - Strings are compared case-insensitively.
+        - Other types fall back to their string repr in the string block.
+        """
+        # None bucket (last)
+        if x is None:
+            return (2, 0, 0.0, "")
+
+        # Numeric bucket (first)
+        is_numeric = (
+            isinstance(x, (int, float, Decimal)) and not isinstance(x, bool)
+        ) or isinstance(x, _NUMPY_NUM)
+        if is_numeric:
+            v = float(x)
+            if math.isnan(v):
+                # place NaN after other numbers but before strings/None
+                return (0, 1, 0.0, "")
+            # finite or ±inf: normal numeric ordering
+            return (0, 0, v, "")
+
+        # String bucket (middle)
+        if isinstance(x, str):
+            return (1, 0, 0.0, x.lower())
+
+        # Fallback: treat other types as strings via repr
+        return (1, 0, 0.0, str(x).lower())
+
     # ---- initial state ----
     device = probs.device
     n_sample_loop = max(int(n_sample // sample_batch_size), 1)
@@ -1295,7 +1534,7 @@ def run_rule_extraction(
     sys_val_list = []
 
     # JSONL file for metrics (append-only)
-    metrics_path = os.path.join(output_dir, f"metrics.jsonl")
+    metrics_path = os.path.join(output_dir, metrics_path)
     # snapshot rules paths
     rules_surv_path = os.path.join(output_dir, surv_json_name)
     rules_fail_path = os.path.join(output_dir, fail_json_name)
@@ -1307,12 +1546,14 @@ def run_rule_extraction(
 
     # last known probabilities (only updated when recomputed)
     last_probs = {"survival": None, "failure": None, "unknown": None}
+    
 
     # ---- main loop ----
     while (is_new_surv_cand or is_new_fail_cand) and (unk_prob > unk_prob_thres):
         n_round += 1
         t0 = time.perf_counter()
 
+        print("---")
         print(f"Round: {n_round}, Unk. prob.: {unk_prob:.3e}")
         print(f"No. of non-dominant rules: {len(rules_mat_surv)+len(rules_mat_fail)}, "
               f"Survival rules: {len(rules_mat_surv)}, Failure rules: {len(rules_mat_fail)}")
@@ -1330,9 +1571,15 @@ def run_rule_extraction(
             fval, sys_st, min_comps_st = sfun(comps_st_test)
             if min_comps_st is None:
                 if sys_st == 's':
-                    min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
+                    if min_rule_search:
+                        min_comps_st, _ = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1)
+                    else:
+                        min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
                 else:
-                    min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
+                    if min_rule_search:
+                        min_comps_st, _ = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0)
+                    else:
+                        min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
 
             if sys_st == 's':
                 print("Survival sample found from survival rules 👍")
@@ -1341,14 +1588,15 @@ def run_rule_extraction(
                 print("Failure sample found from survival rules 👍👍")
                 rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
 
-            print(f"New rule added. System state: {sys_st}, flow: {fval}. Total samples: {n_samp2}.")
+            print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_samp2}.")
             print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
 
             # ---- Track system values if new ----
-            fval_int = int(fval)
-            if fval_int not in sys_val_list:
-                sys_val_list.append(fval_int)
-                sys_val_list.sort(reverse=True) # sort by descending system value
+            if isinstance(fval, float):
+                fval = int(round(fval * 1000)) / 1000.0 # round to 3 decimal places
+            if fval not in sys_val_list:
+                sys_val_list.append(fval)
+                sys_val_list.sort(key = _mixed_sort_key) 
                 print(f"Updated sys_vals: {sys_val_list}")
 
         # ---- 4) Get a failure candidate from failure rules ----
@@ -1364,9 +1612,15 @@ def run_rule_extraction(
             fval, sys_st, min_comps_st = sfun(comps_st_test)
             if min_comps_st is None:
                 if sys_st == 's':
-                    min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
+                    if min_rule_search:
+                        min_comps_st, _ = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1)
+                    else:                      
+                        min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
                 else:
-                    min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
+                    if min_rule_search:
+                        min_comps_st, _ = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0)
+                    else:
+                        min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
 
             if sys_st == 'f':
                 print("Failure sample found from failure rules 👍")
@@ -1375,14 +1629,15 @@ def run_rule_extraction(
                 print("Survival sample found from failure rules 👍👍")
                 rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
 
-            print(f"New rule added. System state: {sys_st}, flow: {fval}. Total samples: {n_samp3}.")
+            print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_samp3}.")
             print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
 
             # ---- Track system values if new ----
-            fval_int = int(fval)
-            if fval_int not in sys_val_list:
-                sys_val_list.append(fval_int)
-                sys_val_list.sort(reverse=True)
+            if isinstance(fval, float):
+                fval = int(round(fval * 1000)) / 1000.0 # round to 3 decimal places
+            if fval not in sys_val_list:
+                sys_val_list.append(fval)
+                sys_val_list.sort(key = _mixed_sort_key)
                 print(f"Unique system values: {sys_val_list}")
 
         # ---- Periodic probability (bound) test via sampling ----
@@ -1398,6 +1653,7 @@ def run_rule_extraction(
                 counts["unknown"] += counts_i["unknown"]
 
             samp_probs = {k: v / (sample_batch_size * total_loops) for k, v in counts.items()}
+            print("---")
             print(f"Probs: 'surv': {samp_probs['survival']: .3e}, 'fail': {samp_probs['failure']: .3e}, 'unkn': {samp_probs['unknown']: .3e}")
             unk_prob = samp_probs["unknown"]
             last_probs.update(samp_probs)
@@ -1453,6 +1709,7 @@ def run_rule_extraction(
         counts["unknown"] += counts_i["unknown"]
 
     samp_probs = {k: v / (sample_batch_size * total_loops) for k, v in counts.items()}
+    print("---")
     print(f"[Final results] Probs: 'surv': {samp_probs['survival']: .3e}, 'fail': {samp_probs['failure']: .3e}, 'unkn': {samp_probs['unknown']: .3e}")
     unk_prob = samp_probs["unknown"]
     last_probs.update(samp_probs)

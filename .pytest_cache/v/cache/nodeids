@@ -1,4 +1,8 @@
 [
+  "tests/test_tsum.py::test_minimise_fail_states_random1",
+  "tests/test_tsum.py::test_minimise_fail_states_random2",
+  "tests/test_tsum.py::test_minimise_surv_states_random1",
+  "tests/test_tsum.py::test_minimise_surv_states_random2",
   "tests/test_tsum.py::test_update_rules1",
   "tests/test_tsum.py::test_update_rules2",
   "tests/test_tsum.py::test_update_rules3",

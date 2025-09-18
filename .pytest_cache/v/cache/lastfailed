@@ -47,5 +47,6 @@
   "tests/test_tsum.py::test_update_rules1": true,
   "tests/test_tsum.py::test_update_rules2": true,
   "tests/test_tsum.py::test_update_rules3": true,
-  "tests/test_tsum.py::test_update_rules4": true
+  "tests/test_tsum.py::test_update_rules4": true,
+  "tests/test_tsum.py::test_minimise_fail_states_random1": true
 }

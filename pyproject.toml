@@ -1,0 +1,30 @@
+[project]
+name = "tsum"
+version = "0.1.0"
+description = "Tensor-based System Uncertainty Methods (TSUM) for system risk assessment"
+authors = [
+    { name = "Ji-Eun Byun", email = "ji-eun.byun@glasgow.ac.uk" }
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.21",
+    "torch>=1.13",
+    "networkx>=3.0",
+    "jsonschema>=4.0",
+    "pyyaml>=6.0"
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tsum*"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
