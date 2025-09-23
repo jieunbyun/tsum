@@ -3,7 +3,7 @@ def sys_fun_sum(comps_st, comps_capa, thres, sys_surv_st_int):
     assert sys_surv_st_int > 0, "System survival state must be positive."
 
     comps_sum = sum(comps_capa[k][v] for k, v in comps_st.items())
-    
+
     if comps_sum < thres:
         sys_st = 'f'
         min_comps_st = None
@@ -20,6 +20,7 @@ def sys_fun_sum(comps_st, comps_capa, thres, sys_surv_st_int):
         min_comps_st['sys'] = ('>=', sys_surv_st_int)
 
     return comps_sum, sys_st, min_comps_st
+
 
 def print_tensor(tensor):
     print(f"(shape: {tensor.shape}):")

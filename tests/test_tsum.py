@@ -741,18 +741,18 @@ def def_B1():
         [[0,1,1],[0,1,1],[1,0,0],[0,1,1],[0,1,1]],
         [[1,1,1],[0,1,1],[0,1,1],[1,1,1],[0,1,1]]
         ], dtype=torch.int32, device=device)
-    
+
     return B
 
 @pytest.fixture
 def def_B2():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     B = torch.tensor([
-    [[1,0,0],[0,0,1],[1,0,0],[0,0,1],[0,1,1]], 
-    [[0,1,1],[0,1,0],[1,0,0],[0,0,1],[0,1,1]], 
+    [[1,0,0],[0,0,1],[1,0,0],[0,0,1],[0,1,1]],
+    [[0,1,1],[0,1,0],[1,0,0],[0,0,1],[0,1,1]],
     [[0,1,1],[1,0,0],[0,1,1],[0,0,1],[0,1,1]],
-    [[1,0,0],[0,0,1],[0,1,1],[1,1,0],[0,1,1]], 
-    [[0,1,1],[0,1,0],[0,1,1],[1,1,0],[0,1,1]], 
+    [[1,0,0],[0,0,1],[0,1,1],[1,1,0],[0,1,1]],
+    [[0,1,1],[0,1,0],[0,1,1],[1,1,0],[0,1,1]],
     [[0,1,1],[0,0,1],[1,0,0],[0,0,1],[0,1,1]],
     [[0,1,1],[0,0,1],[0,1,1],[1,1,0],[0,1,1]]
     ], dtype=torch.int32, device=device)
@@ -845,7 +845,7 @@ def test_groups_by_column_remhash_dict3(def_B3):
     expected = tensor_to_list(expected)
 
     assert out == expected, f"Expected {expected}, but got {out}"
-    
+
 def test_plan_merges1():
     groups_per_col = [
         [torch.tensor([0, 1, 2], dtype=torch.int32)],
@@ -886,10 +886,10 @@ def test_apply_merges1(def_B2):
     merge_plan = [(0, 5, 0), (3, 6, 0)]
 
     B_merged, kept_indices = tsum.apply_merges(B, merge_plan)
-    
+
     expected = torch.tensor([
     [[0,1,1],[0,1,0],[1,0,0],[0,0,1],[0,1,1]],
-    [[0,1,1],[1,0,0],[0,1,1],[0,0,1],[0,1,1]], 
+    [[0,1,1],[1,0,0],[0,1,1],[0,0,1],[0,1,1]],
     [[0,1,1],[0,1,0],[0,1,1],[1,1,0],[0,1,1]],
     [[1,1,1],[0,0,1],[1,0,0],[0,0,1],[0,1,1]],
     [[1,1,1],[0,0,1],[0,1,1],[1,1,0],[0,1,1]]
@@ -906,7 +906,7 @@ def test_apply_merges2(def_B1):
     merge_plan = [(0, 2, 0), (1, 3, 0)]
 
     B_merged, kept_indices = tsum.apply_merges(B, merge_plan)
-    
+
     expected = torch.tensor([
     [[1,1,1],[0,1,1],[0,1,1],[1,1,1],[0,1,1]],
     [[1,1,1],[1,0,0],[0,1,1],[0,1,1],[0,1,1]],
@@ -924,7 +924,7 @@ def test_apply_merges3(def_B3):
     merge_plan = [(1, 2, 1)]
 
     B_merged, kept_indices = tsum.apply_merges(B, merge_plan)
-    
+
     expected = torch.tensor([
     [[1,1,1],[1,1,1],[1,0,0],[0,0,1],[0,1,1]],
     [[1,1,1],[1,1,1],[0,1,1],[0,1,1],[0,1,1]]
@@ -989,7 +989,7 @@ def test_sample_complementary_events(ex_surv_fail_rules):
     assert fail_cand.shape == (rules_mat_fail.shape[1], rules_mat_fail.shape[2])
     assert n_samp0 > 0
 
-    surv_cand, n_samp1 = tsum.sample_complementary_events(probs, rules_mat_fail, rules_mat_surv, rules_st = 'fail') 
+    surv_cand, n_samp1 = tsum.sample_complementary_events(probs, rules_mat_fail, rules_mat_surv, rules_st = 'fail')
 
     assert surv_cand.shape == (rules_mat_surv.shape[1], rules_mat_surv.shape[2])
     assert n_samp1 > 0
@@ -1011,7 +1011,7 @@ def test_mask_from_first_one1():
         [1, 0, 0],
         [1, 1, 0],
         [1, 1, 1]], device='cuda:0', dtype=torch.int32)
-    
+
     assert torch.equal(x_after, x_after_expected), f"Expected {x_after_expected}, but got {x_after}"
     assert torch.equal(x_before, x_before_expected), f"Expected {x_before_expected}, but got {x_before}"
 
@@ -1051,7 +1051,7 @@ def test_mask_from_first_one2():
                       [1, 1, 0],
                       [1, 0, 0],
                       [1, 1, 1]]], device='cuda:0', dtype=torch.int32)
-    
+
     assert torch.equal(x_after, x_after_expected), f"Expected {x_after_expected}, but got {x_after}"
     assert torch.equal(x_before, x_before_expected), f"Expected {x_before_expected}, but got {x_before}"
 
@@ -1065,7 +1065,7 @@ def test_update_rules1(ex_surv_fail_rules_with_dict):
 
     expected_rules_dict = [{'x2': ('<=', 1), 'x3': ('<=', 0), 'x4': ('<=', 0), 'sys': ('<=', 0)},
                            {'x1': ('<=', 0), 'x3': ('<=', 0), 'sys': ('<=', 0)}]
-    
+
     expected_rules_mat = torch.tensor([
         [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0], [1, 0, 0]],
         [[1, 0, 0], [1, 1, 1], [1, 0, 0], [1, 1, 1], [1, 0, 0]]
@@ -1122,7 +1122,7 @@ def test_update_rules4(ex_surv_fail_rules_with_dict):
 
     expected_rules_dict = [{'x2': ('<=', 1), 'x3': ('<=', 0), 'x4': ('<=', 0), 'sys': ('<=', 0)},
                            {'x1': ('<=', 0),'x2': ('<=', 0), 'x3': ('<=', 0), 'sys': ('<=', 0)}]
-    
+
     expected_rules_mat = torch.tensor([
         [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0], [1, 0, 0]],
         [[1, 0, 0], [1, 0, 0], [1, 0, 0], [1, 1, 1], [1, 0, 0]]
@@ -1143,7 +1143,7 @@ def surv_fail_rules_ex_4comps():
                   {'x2': ('<=', 0), 'sys': ('<=', 0)},
                   {'x3': ('<=', 0), 'sys': ('<=', 0)},
                   {'x4': ('<=', 0), 'sys': ('<=', 0)}]
-    
+
     row_names = ['x1', 'x2', 'x3', 'x4', 'sys']
 
     return surv_rules, fail_rules, row_names

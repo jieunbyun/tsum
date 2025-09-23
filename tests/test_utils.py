@@ -1,4 +1,5 @@
-from tensor_uq_etc import sys_fun_sum
+#from tensor_uq_etc import sys_fun_sum
+from tsum.utils import sys_fun_sum
 
 def test_sys_fun_sum1():
     thres = 24
@@ -9,7 +10,7 @@ def test_sys_fun_sum1():
                   'x3': [0, 15, 15],
                   'x4': [0, 20, 40]}
 
-    fval, sys_st, main_comps_st = sys_fun_sum(comps_st, comps_capa, thres)
+    fval, sys_st, main_comps_st = sys_fun_sum(comps_st, comps_capa, thres, 1)
 
     assert fval == 60, f"Total capacity should be 60, got {fval}"
     assert sys_st == 's', f"System state should be 's', got {sys_st}"
@@ -25,7 +26,7 @@ def test_sys_fun_sum2():
                   'x3': [0, 15, 15],
                   'x4': [0, 20, 40]}
 
-    fval, sys_st, main_comps_st = sys_fun_sum(comps_st, comps_capa, thres)
+    fval, sys_st, main_comps_st = sys_fun_sum(comps_st, comps_capa, thres, 1)
 
     assert fval == 15, f"Total capacity should be 15, got {fval}"
     assert sys_st == 'f', f"System state should be 'f', got {sys_st}"
@@ -40,7 +41,7 @@ def test_sys_fun_sum3():
                   'x3': [0, 15, 15],
                   'x4': [0, 20, 40]}
 
-    fval, sys_st, main_comps_st = sys_fun_sum(comps_st, comps_capa, thres)
+    fval, sys_st, main_comps_st = sys_fun_sum(comps_st, comps_capa, thres, 1)
 
     assert fval == 60, f"Total capacity should be 60, got {fval}"
     assert sys_st == 's', f"System state should be 's', got {sys_st}"
