@@ -63,6 +63,7 @@ def minimise_surv_states_random(
     sfun,
     sys_surv_st: int,
     *,
+    fval: Optional[Any] = None,
     min_state: int = 0,
     step: int = 1,
     seed: Optional[int] = None,
@@ -116,15 +117,17 @@ def minimise_surv_states_random(
             continue
 
         prev = state[comp]
+        fval_prev = fval
         state[comp] = prev - step
         attempts += 1
 
         # Expect sfun to return (value, 's'/'f', info) or similar
         try:
-            status = sfun(state)[1]
+            fval, status, _ = sfun(state)
         except Exception as e:
             # If your sfun has a different signature, surface the error clearly
             state[comp] = prev  # revert
+            fval = fval_prev
             dq.popleft()
             removed_on_failure.append(comp)
             continue
@@ -139,6 +142,7 @@ def minimise_surv_states_random(
         else:
             # Revert and remove from further consideration
             state[comp] = prev
+            fval = fval_prev
             dq.popleft()
             removed_on_failure.append(comp)
 
@@ -147,7 +151,8 @@ def minimise_surv_states_random(
         'removed_on_failure': removed_on_failure,
         'hit_min_state': hit_min_state,
         'attempts': attempts,
-        'final_state': state
+        'final_state': state,
+        'final_sys_state': fval
     }
 
     min_rule = get_min_surv_comps_st(state, sys_surv_st)
@@ -159,6 +164,7 @@ def minimise_fail_states_random(
     sfun,
     max_state: int,
     *,
+    fval: Optional[Any] = None,
     sys_fail_st: int = 0,
     step: int = 1,
     seed: Optional[int] = None,
@@ -213,15 +219,17 @@ def minimise_fail_states_random(
             continue
 
         prev = state[comp]
+        fval_prev = fval
         state[comp] = prev + step
         attempts += 1
 
         # Expect sfun to return (value, 's'/'f', info) or similar
         try:
-            status = sfun(state)[1]
+            fval, status, _ = sfun(state)
         except Exception as e:
             # If your sfun has a different signature, surface the error clearly
             state[comp] = prev  # revert
+            fval = fval_prev
             dq.popleft()
             removed_on_survival.append(comp)
             continue
@@ -236,6 +244,7 @@ def minimise_fail_states_random(
         else:
             # Revert and remove from further consideration
             state[comp] = prev
+            fval = fval_prev
             dq.popleft()
             removed_on_survival.append(comp)
 
@@ -244,7 +253,8 @@ def minimise_fail_states_random(
         'removed_on_survival': removed_on_survival,
         'hit_min_state': hit_min_state,
         'attempts': attempts,
-        'final_state': state
+        'final_state': state,
+        'final_sys_state': fval
     }
 
     min_rule = get_min_fail_comps_st(state, max_state, sys_fail_st)
@@ -1424,7 +1434,7 @@ def run_rule_extraction(
     rules_mat_surv: Tensor = None,
     rules_mat_fail: Tensor = None,
     # Analysis parameters
-    stochastic_search: bool = True,
+    stochastic_search: bool = True, 
     gamma: float = 0.5, # if stochastic_search==False, ignored. 0 < γ < 1 → more emphasis on exploration; γ > 1 → more emphasis on exploitation
     # Termination / threshold settings
     unk_prob_thres: float = 5e-2,
@@ -1484,37 +1494,6 @@ def run_rule_extraction(
     def _save_pt(t: torch.Tensor, path: str) -> None:
         torch.save(t.detach().cpu(), path)
 
-    def _mixed_sort_key(x):
-        """
-        Order: numbers ↑, then strings a→z, then None.
-        - Numbers include: int, float, Decimal, NumPy integer/floating scalars.
-        - NaN is placed at the end of the numeric block.
-        - Strings are compared case-insensitively.
-        - Other types fall back to their string repr in the string block.
-        """
-        # None bucket (last)
-        if x is None:
-            return (2, 0, 0.0, "")
-
-        # Numeric bucket (first)
-        is_numeric = (
-            isinstance(x, (int, float, Decimal)) and not isinstance(x, bool)
-        ) or isinstance(x, _NUMPY_NUM)
-        if is_numeric:
-            v = float(x)
-            if math.isnan(v):
-                # place NaN after other numbers but before strings/None
-                return (0, 1, 0.0, "")
-            # finite or ±inf: normal numeric ordering
-            return (0, 0, v, "")
-
-        # String bucket (middle)
-        if isinstance(x, str):
-            return (1, 0, 0.0, x.lower())
-
-        # Fallback: treat other types as strings via repr
-        return (1, 0, 0.0, str(x).lower())
-
     # ---- initial state ----
     device = probs.device
     n_sample_loop = max(int(n_sample // sample_batch_size), 1)
@@ -1559,86 +1538,44 @@ def run_rule_extraction(
               f"Survival rules: {len(rules_mat_surv)}, Failure rules: {len(rules_mat_fail)}")
 
         # ---- 3) Get a survival candidate from survival rules ----
-        surv_cand, n_samp2 = sample_complementary_events_max_prob_same_rule(
-            probs, rules_mat_surv, rules_mat_fail, rules_st='surv', B=rule_search_batch_size, max_iters=rule_search_max_iters, stochastic_search=stochastic_search, gamma=gamma
-        )
-        if surv_cand is None:
-            is_new_surv_cand = False
-        else:
-            is_new_surv_cand = True
-
-            comps_st_test = from_Bbound_to_comps_st(surv_cand, row_names)
-            fval, sys_st, min_comps_st = sfun(comps_st_test)
-            if min_comps_st is None:
-                if sys_st == 's':
-                    if min_rule_search:
-                        min_comps_st, _ = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1)
-                    else:
-                        min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
-                else:
-                    if min_rule_search:
-                        min_comps_st, _ = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0)
-                    else:
-                        min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
-
-            if sys_st == 's':
-                print("Survival sample found from survival rules 👍")
-                rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
-            else:
-                print("Failure sample found from survival rules 👍👍")
-                rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
-
-            print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_samp2}.")
-            print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
-
-            # ---- Track system values if new ----
-            if isinstance(fval, float):
-                fval = int(round(fval * 1000)) / 1000.0 # round to 3 decimal places
-            if fval not in sys_val_list:
-                sys_val_list.append(fval)
-                sys_val_list.sort(key = _mixed_sort_key) 
-                print(f"Updated sys_vals: {sys_val_list}")
+        is_new_surv_cand, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list = \
+            run_survival_candidate_round(
+                probs=probs,
+                rules_mat_surv=rules_mat_surv,
+                rules_mat_fail=rules_mat_fail,
+                rules_surv=rules_surv,
+                rules_fail=rules_fail,
+                row_names=row_names,
+                n_state=n_state,
+                sys_val_list=sys_val_list,
+                sfun=sfun,
+                rule_search_batch_size=rule_search_batch_size,
+                rule_search_max_iters=rule_search_max_iters,
+                stochastic_search=stochastic_search,
+                gamma=gamma,
+                min_rule_search=min_rule_search,
+                rule_update_verbose=rule_update_verbose,
+            )
 
         # ---- 4) Get a failure candidate from failure rules ----
-        fail_cand, n_samp3 = sample_complementary_events_max_prob_same_rule(
-            probs, rules_mat_fail, rules_mat_surv, rules_st='fail', B=rule_search_batch_size, max_iters=rule_search_max_iters, stochastic_search=stochastic_search, gamma=gamma
-        )
-        if fail_cand is None:
-            is_new_fail_cand = False
-        else:
-            is_new_fail_cand = True
-
-            comps_st_test = from_Bbound_to_comps_st(fail_cand, row_names)
-            fval, sys_st, min_comps_st = sfun(comps_st_test)
-            if min_comps_st is None:
-                if sys_st == 's':
-                    if min_rule_search:
-                        min_comps_st, _ = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1)
-                    else:                      
-                        min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
-                else:
-                    if min_rule_search:
-                        min_comps_st, _ = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0)
-                    else:
-                        min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
-
-            if sys_st == 'f':
-                print("Failure sample found from failure rules 👍")
-                rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
-            else:
-                print("Survival sample found from failure rules 👍👍")
-                rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
-
-            print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_samp3}.")
-            print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
-
-            # ---- Track system values if new ----
-            if isinstance(fval, float):
-                fval = int(round(fval * 1000)) / 1000.0 # round to 3 decimal places
-            if fval not in sys_val_list:
-                sys_val_list.append(fval)
-                sys_val_list.sort(key = _mixed_sort_key)
-                print(f"Unique system values: {sys_val_list}")
+        is_new_fail_cand, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list = \
+            run_failure_candidate_round(
+                probs=probs,
+                rules_mat_surv=rules_mat_surv,
+                rules_mat_fail=rules_mat_fail,
+                rules_surv=rules_surv,
+                rules_fail=rules_fail,
+                row_names=row_names,
+                n_state=n_state,
+                sys_val_list=sys_val_list,
+                sfun=sfun,
+                rule_search_batch_size=rule_search_batch_size,
+                rule_search_max_iters=rule_search_max_iters,
+                stochastic_search=stochastic_search,
+                gamma=gamma,
+                min_rule_search=min_rule_search,
+                rule_update_verbose=rule_update_verbose,
+            )
 
         # ---- Periodic probability (bound) test via sampling ----
         probs_updated = False
@@ -1740,6 +1677,21 @@ def run_rule_extraction(
         "metrics_log": metrics_log,  # also returned in-memory
     }
 
+def mixed_sort_key(x):
+    if x is None:
+        return (2, 0, 0.0, "")
+    is_numeric = (
+        isinstance(x, (int, float, Decimal)) and not isinstance(x, bool)
+    ) or isinstance(x, _NUMPY_NUM)
+    if is_numeric:
+        v = float(x)
+        if math.isnan(v):
+            return (0, 1, 0.0, "")
+        return (0, 0, v, "")
+    if isinstance(x, str):
+        return (1, 0, 0.0, x.lower())
+    return (1, 0, 0.0, str(x).lower())
+
 def classify_samples_with_indices(
     samples: torch.Tensor,
     survival_rules: List[torch.Tensor],
@@ -1837,6 +1789,143 @@ def classify_samples_with_indices(
 
     return result
 
+def run_survival_candidate_round(
+    *,
+    probs: torch.Tensor,
+    rules_mat_surv: torch.Tensor,
+    rules_mat_fail: torch.Tensor,
+    rules_surv: List[Dict[str, Any]],
+    rules_fail: List[Dict[str, Any]],
+    row_names: List[str],
+    n_state: int,
+    sys_val_list: List[Any],
+    sfun,
+    rule_search_batch_size: int,
+    rule_search_max_iters: int,
+    stochastic_search: bool,
+    gamma: float,
+    min_rule_search: bool,
+    rule_update_verbose: bool,
+):
+    """Former Part 3 (survival candidate). Returns (found_new, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)."""
+    surv_cand, n_samp2 = sample_complementary_events_max_prob_same_rule(
+        probs,
+        rules_mat_surv,
+        rules_mat_fail,
+        rules_st='surv',
+        B=rule_search_batch_size,
+        max_iters=rule_search_max_iters,
+        stochastic_search=stochastic_search,
+        gamma=gamma,
+    )
+    if surv_cand is None:
+        return (False, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)
+
+    comps_st_test = from_Bbound_to_comps_st(surv_cand, row_names)
+    fval, sys_st, min_comps_st = sfun(comps_st_test)
+
+    if min_comps_st is None:
+        if sys_st == 's':
+            if min_rule_search:
+                min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1)
+                fval = info.get('final_sys_state', fval)
+            else:
+                min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
+        else:
+            if min_rule_search:
+                min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0)
+                fval = info.get('final_sys_state', fval)
+            else:
+                min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
+
+    if sys_st == 's':
+        print("Survival sample found from survival rules 👍")
+        rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
+    else:
+        print("Failure sample found from survival rules 👍👍")
+        rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
+
+    print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_samp2}.")
+    print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
+
+    if isinstance(fval, float):
+        fval = int(round(fval * 1000)) / 1000.0
+    if fval not in sys_val_list:
+        sys_val_list.append(fval)
+        sys_val_list.sort(key=mixed_sort_key)
+        print(f"Updated sys_vals: {sys_val_list}")
+
+    return (True, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)
+
+
+def run_failure_candidate_round(
+    *,
+    probs: torch.Tensor,
+    rules_mat_surv: torch.Tensor,
+    rules_mat_fail: torch.Tensor,
+    rules_surv: List[Dict[str, Any]],
+    rules_fail: List[Dict[str, Any]],
+    row_names: List[str],
+    n_state: int,
+    sys_val_list: List[Any],
+    sfun,
+    rule_search_batch_size: int,
+    rule_search_max_iters: int,
+    stochastic_search: bool,
+    gamma: float,
+    min_rule_search: bool,
+    rule_update_verbose: bool,
+):
+    """Former Part 4 (failure candidate). Returns (found_new, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)."""
+    fail_cand, n_samp3 = sample_complementary_events_max_prob_same_rule(
+        probs,
+        rules_mat_fail,
+        rules_mat_surv,
+        rules_st='fail',
+        B=rule_search_batch_size,
+        max_iters=rule_search_max_iters,
+        stochastic_search=stochastic_search,
+        gamma=gamma,
+    )
+    if fail_cand is None:
+        return (False, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)
+
+    comps_st_test = from_Bbound_to_comps_st(fail_cand, row_names)
+    fval, sys_st, min_comps_st = sfun(comps_st_test)
+
+    if min_comps_st is None:
+        if sys_st == 's':
+            if min_rule_search:
+                min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1)
+                fval = info.get('final_sys_state', fval)
+            else:
+                min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
+        else:
+            if min_rule_search:
+                min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0)
+                fval = info.get('final_sys_state', fval)
+            else:
+                min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
+
+    if sys_st == 'f':
+        print("Failure sample found from failure rules 👍")
+        rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
+    else:
+        print("Survival sample found from failure rules 👍👍")
+        rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
+
+    print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_samp3}.")
+    print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
+
+    if isinstance(fval, float):
+        fval = int(round(fval * 1000)) / 1000.0
+    if fval not in sys_val_list:
+        sys_val_list.append(fval)
+        sys_val_list.sort(key=mixed_sort_key)
+        print(f"Unique system values: {sys_val_list}")
+
+    return (True, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)
+
 def get_comp_cond_sys_prob(
     rules_mat_surv: Tensor,
     rules_mat_fail: Tensor,
@@ -1932,3 +2021,293 @@ def get_comp_cond_sys_prob(
     total = float(n_sample)
     cond_probs = {k: counts[k] / total for k in counts}
     return cond_probs
+
+def run_rule_extraction_by_mcs(
+    *,
+    sfun,
+    probs: torch.Tensor,
+    row_names: List[str],
+    n_state: int,
+    rules_surv: Optional[List[Dict[str, Any]]] = None,
+    rules_fail: Optional[List[Dict[str, Any]]] = None,
+    rules_mat_surv: Optional[torch.Tensor] = None,
+    rules_mat_fail: Optional[torch.Tensor] = None,
+    # Termination / threshold settings
+    unk_prob_thres: float = 1e-3,
+    # Frequencies / sampling settings
+    prob_update_every: int = 500,
+    save_every: int = 10,
+    n_sample: int = 10_000_000,
+    sample_batch_size: int = 100_000,
+    rule_search_batch_size: int = 1_024,      # kept for parity; unused in this MCS version
+    rule_search_max_iters: int = 10,          # kept for parity; unused in this MCS version
+    min_rule_search: bool = True,
+    rule_update_verbose: bool = True,
+    # Output control
+    output_dir: str = "tsum_temp",
+    surv_json_name: str = "rules_surv.json",
+    fail_json_name: str = "rules_fail.json",
+    surv_pt_name: str = "rules_surv.pt",
+    fail_pt_name: str = "rules_fail.pt",
+    metrics_path: str = "metrics.jsonl",
+) -> Dict[str, Any]:
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # ---- helpers ----
+    def _avg_rule_len(rule_store: Any) -> float:
+        try:
+            if not rule_store:
+                return 0.0
+            return (sum(len(r) - 1 for r in rule_store)) / len(rule_store)
+        except Exception:
+            return 0.0
+
+    def _save_json(obj, path):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=4)
+
+    def _save_pt(t: torch.Tensor, path: str) -> None:
+        torch.save(t.detach().cpu(), path)
+
+    # ---- initial state ----
+    if rules_surv is None: rules_surv = []
+    if rules_fail is None: rules_fail = []
+
+    device = probs.device
+
+    unk_prob = 1.0
+    n_round = 0
+    metrics_log: List[Dict[str, Any]] = []
+
+    n_vars = len(row_names)
+    if rules_mat_surv is None:
+        rules_mat_surv = torch.empty((0, n_vars, n_state), dtype=torch.int32, device=device)
+    if rules_mat_fail is None:
+        rules_mat_fail = torch.empty((0, n_vars, n_state), dtype=torch.int32, device=device)
+
+    sys_val_list: List[Any] = []
+
+    metrics_path = os.path.join(output_dir, metrics_path)
+    rules_surv_path = os.path.join(output_dir, surv_json_name)
+    rules_fail_path = os.path.join(output_dir, fail_json_name)
+    rules_surv_pt_path = os.path.join(output_dir, surv_pt_name)
+    rules_fail_pt_path = os.path.join(output_dir, fail_pt_name)
+
+    is_new_cand = True
+    last_probs = {"survival": None, "failure": None, "unknown": None}
+
+    total_loops = max(n_sample // sample_batch_size, 1)
+
+    # ---- main loop ----
+    while is_new_cand and (unk_prob > unk_prob_thres):
+        n_round += 1
+        t0 = time.perf_counter()
+
+        print("---")
+        print(f"Round: {n_round}, Unk. prob.: {unk_prob:.3e}")
+        print(f"No. of non-dominant rules: {len(rules_mat_surv)+len(rules_mat_fail)}, "
+              f"Survival rules: {len(rules_mat_surv)}, Failure rules: {len(rules_mat_fail)}")
+
+        is_new_cand = False
+        counts = {"survival": 0, "failure": 0, "unknown": 0}
+        res = None
+        samples = None
+        i = -1
+
+        for i in range(total_loops):
+            samples = sample_categorical(probs, sample_batch_size)  # (B, n_var, n_state)
+            res = classify_samples_with_indices(samples, rules_mat_surv, rules_mat_fail, return_masks=True)
+
+            counts["survival"] += int(res["survival"])
+            counts["failure"]  += int(res["failure"])
+            counts["unknown"]  += int(res["unknown"])   # FIX: track unknowns too
+
+            if res['idx_unknown'].numel() > 0:
+                is_new_cand = True
+                break
+
+        # denominator = number of samples actually processed
+        n_sample_actual = sample_batch_size * (i + 1)
+        samp_probs = {k: v / n_sample_actual for k, v in counts.items()}
+        unk_prob = samp_probs["unknown"]
+        last_probs.update(samp_probs)
+
+        # If no unknowns found, skip candidate creation and continue to periodic update / exit
+        if not is_new_cand:
+            probs_updated = False
+            if (n_round % prob_update_every) == 0:
+                # refresh with a full estimate
+                loops = max(n_sample // sample_batch_size, 1)
+                c2 = {"survival": 0, "failure": 0, "unknown": 0}
+                for _ in range(loops):
+                    s = sample_categorical(probs, sample_batch_size)
+                    ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
+                    for k in c2:
+                        c2[k] += ci[k]
+                sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
+                print("---")
+                print(f"Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
+                unk_prob = sp2["unknown"]
+                last_probs.update(sp2)
+                n_sample_actual = sample_batch_size * loops
+                probs_updated = True
+
+            # metrics, persist, then break condition handled by while guard
+            dt = time.perf_counter() - t0
+            metrics_log.append({
+                "round": n_round,
+                "time_sec": dt,
+                "n_rules_surv": int(len(rules_mat_surv)),
+                "n_rules_fail": int(len(rules_mat_fail)),
+                "probs_updated": probs_updated,
+                "p_survival": last_probs["survival"],
+                "p_failure": last_probs["failure"],
+                "p_unknown": last_probs["unknown"],
+                "n_sample_actual": n_sample_actual,
+                "avg_len_surv": _avg_rule_len(rules_surv),
+                "avg_len_fail": _avg_rule_len(rules_fail),
+            })
+
+            if (n_round % save_every) == 0:
+                with open(metrics_path, "a", encoding="utf-8") as mf:
+                    for e in metrics_log[-save_every:]:
+                        mf.write(json.dumps(e) + "\n")
+                _save_json(rules_surv, rules_surv_path)
+                _save_json(rules_fail, rules_fail_path)
+                _save_pt(rules_mat_surv, rules_surv_pt_path)
+                _save_pt(rules_mat_fail, rules_fail_pt_path)
+
+            continue  # go to next while-check (likely exit if unk_prob <= thresh)
+
+        # --- We have unknowns: extract a random unknown and build a rule ---
+        idx_unknown = res['idx_unknown']
+        rand_idx = idx_unknown[torch.randint(len(idx_unknown), (1,))].item()
+        sample0 = samples[rand_idx]  # (n_var, n_state)
+
+        states = torch.argmax(sample0, dim=1).tolist()
+        comps_st_test = {row_names[k]: int(states[k]) for k in range(n_vars-1)}  # exclude system var
+
+        fval, sys_st, min_comps_st = sfun(comps_st_test)
+        if min_comps_st is None:
+            if sys_st == 's':
+                if min_rule_search:
+                    min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1, fval=fval)
+                    fval = info.get('final_sys_state', fval)
+                else:
+                    min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
+            else:
+                if min_rule_search:
+                    min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0, fval=fval)
+                    fval = info.get('final_sys_state', fval)
+                else:
+                    min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
+
+        if sys_st == 's':
+            print("Survival sample found from sampling.")
+            rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
+        else:
+            print("Failure sample found from sampling.")
+            rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
+
+        print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_sample_actual}.")
+        print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
+
+        if isinstance(fval, float):
+            fval = int(round(fval * 1000)) / 1000.0
+        if fval not in sys_val_list:
+            sys_val_list.append(fval)
+            sys_val_list.sort(key=mixed_sort_key)
+            print(f"Updated sys_vals: {sys_val_list}")
+
+        # ---- Periodic probability (bound) test via sampling ----
+        probs_updated = False
+        if (n_round % prob_update_every) == 0:
+            loops = max(n_sample // sample_batch_size, 1)
+            c2 = {"survival": 0, "failure": 0, "unknown": 0}
+            for _ in range(loops):
+                s = sample_categorical(probs, sample_batch_size)
+                ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
+                for k in c2:
+                    c2[k] += ci[k]
+            sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
+            print("---")
+            print(f"Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
+            unk_prob = sp2["unknown"]
+            last_probs.update(sp2)
+            n_sample_actual = sample_batch_size * loops
+            probs_updated = True
+
+        # ---- metrics for this round ----
+        dt = time.perf_counter() - t0
+        metrics_log.append({
+            "round": n_round,
+            "time_sec": dt,
+            "n_rules_surv": int(len(rules_mat_surv)),
+            "n_rules_fail": int(len(rules_mat_fail)),
+            "probs_updated": probs_updated,
+            "p_survival": last_probs["survival"],
+            "p_failure": last_probs["failure"],
+            "p_unknown": last_probs["unknown"],
+            "n_sample_actual": n_sample_actual,
+            "avg_len_surv": _avg_rule_len(rules_surv),
+            "avg_len_fail": _avg_rule_len(rules_fail),
+        })
+
+        if (n_round % save_every) == 0:
+            with open(metrics_path, "a", encoding="utf-8") as mf:
+                for e in metrics_log[-save_every:]:
+                    mf.write(json.dumps(e) + "\n")
+            _save_json(rules_surv, rules_surv_path)
+            _save_json(rules_fail, rules_fail_path)
+            _save_pt(rules_mat_surv, rules_surv_pt_path)
+            _save_pt(rules_mat_fail, rules_fail_pt_path)
+
+    # Final flush of any remaining metrics not yet written by save_every
+    last_flushed_rounds = (n_round // save_every) * save_every
+    if last_flushed_rounds < n_round and metrics_log:
+        with open(metrics_path, "a", encoding="utf-8") as mf:
+            for e in metrics_log[last_flushed_rounds:]:
+                mf.write(json.dumps(e) + "\n")
+
+    # Final snapshot of rules
+    _save_json(rules_surv, rules_surv_path)
+    _save_json(rules_fail, rules_fail_path)
+    _save_pt(rules_mat_surv, rules_surv_pt_path)
+    _save_pt(rules_mat_fail, rules_fail_pt_path)
+
+    # Final probability check
+    loops = max(n_sample // sample_batch_size, 1)
+    c2 = {"survival": 0, "failure": 0, "unknown": 0}
+    for _ in range(loops):
+        s = sample_categorical(probs, sample_batch_size)
+        ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
+        for k in c2:
+            c2[k] += ci[k]
+    sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
+    print("---")
+    print(f"[Final results] Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
+
+    # Final metrics entry
+    metrics_log.append({
+        "round": n_round,
+        "time_sec": 0.0,
+        "n_rules_surv": int(len(rules_mat_surv)),
+        "n_rules_fail": int(len(rules_mat_fail)),
+        "probs_updated": True,
+        "p_survival": sp2["survival"],
+        "p_failure": sp2["failure"],
+        "p_unknown": sp2["unknown"],
+        "avg_len_surv": _avg_rule_len(rules_surv),
+        "avg_len_fail": _avg_rule_len(rules_fail),
+    })
+
+    return {
+        "sys_vals": sorted(sys_val_list, key=mixed_sort_key),
+        "metrics_path": metrics_path,
+        "rules_surv_path": rules_surv_path,
+        "rules_fail_path": rules_fail_path,
+        "rules_surv_pt_path": rules_surv_pt_path,
+        "rules_fail_pt_path": rules_fail_pt_path,
+        "metrics_log": metrics_log,
+    }
