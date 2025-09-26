@@ -2106,6 +2106,8 @@ def run_rule_extraction_by_mcs(
 
         print("---")
         print(f"Round: {n_round}, Unk. prob.: {unk_prob:.3e}")
+        if last_probs['survival'] is not None and last_probs['failure'] is not None:
+            print(f"Surv probs: {last_probs['survival']:.3e}, Fail probs: {last_probs['failure']:.3e}")
         print(f"No. of non-dominant rules: {len(rules_mat_surv)+len(rules_mat_fail)}, "
               f"Survival rules: {len(rules_mat_surv)}, Failure rules: {len(rules_mat_fail)}")
 
