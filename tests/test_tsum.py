@@ -2,7 +2,6 @@ from pathlib import Path
 HOME = Path(__file__).absolute().parent
 
 from tsum import tsum
-from tsum.utils import sys_fun_sum
 from tsum import utils
 import pytest
 import torch
@@ -33,7 +32,7 @@ def test_get_min_fail_comps_st3():
 
 def test_from_rule_dict_to_mat1():
     rule = {'x1': ('>=', 2), 'x2': ('>=', 2), 'sys': ('>=', 1)}
-    col_names = ['x1', 'x2', 'x3', 'x4', 'sys']
+    col_names = ['x1', 'x2', 'x3', 'x4']
     max_st = 3
 
     rule_mat = tsum.from_rule_dict_to_mat(rule, col_names, max_st)
@@ -41,12 +40,11 @@ def test_from_rule_dict_to_mat1():
     assert torch.equal(rule_mat, torch.tensor([[0, 0, 1],
                                                [0, 0, 1],
                                                [1, 1, 1],
-                                               [1, 1, 1],
-                                               [0, 1, 1]], device=rule_mat.device))
+                                               [1, 1, 1]], device=rule_mat.device))
 
 def test_from_rule_dict_to_mat2():
     rule = {'x1': ('>=', 2), 'x2': ('>=', 2), 'x3': ('>=', 2), 'x4': ('>=', 1), 'sys': ('>=', 1)}
-    col_names = ['x1', 'x2', 'x3', 'x4', 'sys']
+    col_names = ['x1', 'x2', 'x3', 'x4']
     max_st = 3
 
     rule_mat = tsum.from_rule_dict_to_mat(rule, col_names, max_st)
@@ -54,19 +52,17 @@ def test_from_rule_dict_to_mat2():
     assert torch.equal(rule_mat, torch.tensor([[0, 0, 1],
                                                [0, 0, 1],
                                                [0, 0, 1],
-                                               [0, 1, 1],
                                                [0, 1, 1]], device=rule_mat.device))
 
 def test_from_rule_dict_to_mat3():
     rule = {'x2': ('<=', 1), 'x3': ('<', 1), 'x4': ('<=', 0), 'sys': ('<=', 0)}
-    col_names = ['x1', 'x2', 'x3', 'x4', 'sys']
+    col_names = ['x1', 'x2', 'x3', 'x4']
     max_st = 4
 
     rule_mat = tsum.from_rule_dict_to_mat(rule, col_names, max_st)
 
     assert torch.equal(rule_mat, torch.tensor([[1, 1, 1, 1],
                                                [1, 1, 0, 0],
-                                               [1, 0, 0, 0],
                                                [1, 0, 0, 0],
                                                [1, 0, 0, 0]], device=rule_mat.device))
 
@@ -77,8 +73,7 @@ def test_get_branches_cap_branches1():
         [[1,1,1],
          [1,1,1],
          [1,1,1],
-         [1,1,0],
-         [1,1,1]]
+         [1,1,0]]
     ], dtype=torch.int32, device=device)
     utils.print_tensor(B1)
 
@@ -86,14 +81,12 @@ def test_get_branches_cap_branches1():
         [[1,1,1],
          [1,1,1],
          [1,0,0],
-         [1,1,0],
-         [1,1,1]],
+         [1,1,0]],
         [[1,1,1],
          [1,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]
-    ]], dtype=torch.int32, device=device)
+         [1,0,0]]
+    ], dtype=torch.int32, device=device)
     utils.print_tensor(B2)
 
     Bnew = tsum.get_branches_cap_branches(B1, B2)
@@ -103,13 +96,11 @@ def test_get_branches_cap_branches1():
         [[1,1,1],
          [1,1,1],
          [1,0,0],
-         [1,1,0],
-         [1,1,1]],
+         [1,1,0]],
         [[1,1,1],
          [1,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     Bnew = tsum.get_branches_cap_branches(B1, B2)
@@ -124,13 +115,11 @@ def test_get_branches_cap_branches2():
         [[1,1,1],
          [1,1,1],
          [1,0,0],
-         [1,1,0],
-         [1,1,1]],
+         [1,1,0]],
         [[1,1,1],
          [1,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]
+         [1,0,0]
     ]], dtype=torch.int32, device=device)
     utils.print_tensor(B1)
 
@@ -138,13 +127,11 @@ def test_get_branches_cap_branches2():
         [[1,1,1],
          [1,0,0],
          [1,1,1],
-         [0,1,1],
-         [1,1,1]],
+         [0,1,1]],
         [[1,1,1],
          [0,1,1],
          [1,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     Bnew = tsum.get_branches_cap_branches(B1, B2)
@@ -152,18 +139,15 @@ def test_get_branches_cap_branches2():
         [[1,1,1],
          [1,0,0],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[1,1,1],
          [0,1,1],
          [1,0,0],
-         [1,0,0],
-         [1,1,1]],
+         [1,0,0]],
         [[1,1,1],
          [0,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     utils.print_tensor(Bnew)
@@ -177,31 +161,26 @@ def test_get_branches_cap_branches3():
         [[1,1,1],
          [1,0,0],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[1,1,1],
          [0,1,1],
          [1,0,0],
-         [1,1,0],
-         [1,1,1]],
+         [1,1,0]],
         [[1,1,1],
          [0,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     B2 = torch.tensor([
         [[1,0,0],
          [1,1,1],
          [1,1,1],
-         [0,1,1],
-         [1,1,1]],
+         [0,1,1]],
         [[0,1,1],
          [1,1,1],
          [1,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     Bnew = tsum.get_branches_cap_branches(B1, B2)
@@ -209,23 +188,19 @@ def test_get_branches_cap_branches3():
         [[1,0,0],
          [1,0,0],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[1,0,0],
          [0,1,1],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[0,1,1],
          [0,1,1],
          [1,0,0],
-         [1,0,0],
-         [1,1,1]],
+         [1,0,0]],
         [[0,1,1],
          [0,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     assert torch.equal(Bnew, expected)
@@ -236,7 +211,6 @@ def test_get_complementary_events1():
         [1, 1, 1],
         [1, 1, 1],
         [0, 0, 1],
-        [0, 1, 1],
     ], dtype=torch.int32)
 
     Bnew = tsum.get_complementary_events(R)
@@ -245,8 +219,7 @@ def test_get_complementary_events1():
         [[1,1,1],
          [1,1,1],
          [1,1,1],
-         [1,1,0],
-         [1,1,1]]
+         [1,1,0]]
     ], dtype=torch.int32)
 
     utils.print_tensor(Bnew)
@@ -259,7 +232,6 @@ def test_get_complementary_events2():
         [1,1,1],
         [0,1,1],
         [0,1,1],
-        [0,1,1],
     ], dtype=torch.int32)
 
     Bnew = tsum.get_complementary_events(R)
@@ -268,13 +240,11 @@ def test_get_complementary_events2():
         [[1,1,1],
          [1,1,1],
          [1,0,0],
-         [1,1,1],
          [1,1,1]],
         [[1,1,1],
          [1,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]],
+         [1,0,0]],
     ], dtype=torch.int32)
 
     assert torch.equal(Bnew, expected)
@@ -285,7 +255,6 @@ def test_get_complementary_events3():
         [0,1,1],
         [1,1,1],
         [0,1,1],
-        [0,1,1],
     ], dtype=torch.int32)
 
     Bnew = tsum.get_complementary_events(R)
@@ -294,13 +263,11 @@ def test_get_complementary_events3():
         [[1,1,1],
          [1,0,0],
          [1,1,1],
-         [1,1,1],
          [1,1,1]],
         [[1,1,1],
          [0,1,1],
          [1,1,1],
-         [1,0,0],
-         [1,1,1]],
+         [1,0,0]],
     ], dtype=torch.int32)
 
     assert torch.equal(Bnew, expected)
@@ -312,18 +279,15 @@ def test_get_branch_probs1():
         [[1,1,1],
          [1,0,0],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[1,1,1],
          [0,1,1],
          [1,0,0],
-         [1,1,0],
-         [1,1,1]],
+         [1,1,0]],
         [[1,1,1],
          [0,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     prob1 = torch.tensor([[0.3, 0.7, 0.0],
@@ -344,18 +308,15 @@ def test_get_branch_probs2():
         [[1,1,1],
          [1,0,0],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[1,1,1],
          [0,1,1],
          [1,0,0],
-         [1,1,0],
-         [1,1,1]],
+         [1,1,0]],
         [[1,1,1],
          [0,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     prob1 = torch.tensor([[0.1, 0.9, 0.0],
@@ -375,13 +336,11 @@ def test_get_branch_probs3():
         [[1,1,1],
          [1,1,1],
          [1,0,0],
-         [1,1,0],
-         [1,1,1]],
+         [1,1,0]],
         [[1,1,1],
          [1,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     prob1 = torch.tensor([[0.3, 0.7, 0.0],
@@ -401,51 +360,42 @@ def test_get_boundary_branches1():
         [[1,1,1],
          [1,0,0],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[1,1,1],
          [0,1,1],
          [1,0,0],
-         [1,1,0],
-         [1,1,1]],
+         [1,1,0]],
         [[1,1,1],
          [0,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     expected = torch.tensor([
         [[0,0,1],
          [1,0,0],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[0,0,1],
          [0,0,1],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[0,0,1],
          [0,0,1],
          [0,0,1],
-         [1,0,0],
-         [1,1,1]],
+         [1,0,0]],
         [[1,0,0],
          [1,0,0],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[1,0,0],
          [0,1,0],
          [1,0,0],
-         [1,0,0],
-         [1,1,1]],
+         [1,0,0]],
         [[1,0,0],
          [0,1,0],
          [0,1,0],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     Bbound = tsum.get_boundary_branches(B1)
@@ -458,37 +408,31 @@ def test_get_boundary_branches2():
         [[1,1,1],
          [1,1,1],
          [1,0,0],
-         [1,1,0],
-         [1,1,1]],
+         [1,1,0]],
 
         [[1,1,1],
          [1,1,1],
          [0,1,1],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     expected = torch.tensor([
         [[0,0,1],
          [0,0,1],
          [1,0,0],
-         [0,1,0],
-         [1,1,1]],
+         [0,1,0]],
         [[0,0,1],
          [0,0,1],
          [0,0,1],
-         [1,0,0],
-         [1,1,1]],
+         [1,0,0]],
         [[1,0,0],
          [1,0,0],
          [1,0,0],
-         [1,0,0],
-         [1,1,1]],
+         [1,0,0]],
         [[1,0,0],
          [1,0,0],
          [0,1,0],
-         [1,0,0],
-         [1,1,1]]
+         [1,0,0]]
     ], dtype=torch.int32, device=device)
 
     Bbound = tsum.get_boundary_branches(B)
@@ -498,17 +442,17 @@ def test_is_intersect1():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     B = torch.tensor([
-        [[0,0,1],[1,0,0],[1,0,0],[0,1,0],[1,1,1]],
-        [[0,0,1],[0,0,1],[1,0,0],[0,1,0],[1,1,1]],
-        [[0,0,1],[0,0,1],[0,0,1],[1,0,0],[1,1,1]],
-        [[1,0,0],[1,0,0],[1,0,0],[0,1,0],[1,1,1]],
-        [[1,0,0],[0,1,0],[1,0,0],[1,0,0],[1,1,1]],
-        [[1,0,0],[0,1,0],[0,1,0],[0,1,0],[1,1,1]]
+        [[0,0,1],[1,0,0],[1,0,0],[0,1,0]],
+        [[0,0,1],[0,0,1],[1,0,0],[0,1,0]],
+        [[0,0,1],[0,0,1],[0,0,1],[1,0,0]],
+        [[1,0,0],[1,0,0],[1,0,0],[0,1,0]],
+        [[1,0,0],[0,1,0],[1,0,0],[1,0,0]],
+        [[1,0,0],[0,1,0],[0,1,0],[0,1,0]]
     ], dtype=torch.int32, device=device)
 
     R = torch.tensor([
-        [[1,1,1],[1,1,1],[1,1,1],[0,0,1],[0,1,1]],
-        [[1,1,1],[1,1,1],[0,1,1],[0,1,1],[0,1,1]]
+        [[1,1,1],[1,1,1],[1,1,1],[0,0,1]],
+        [[1,1,1],[1,1,1],[0,1,1],[0,1,1]]
     ], dtype=torch.int32, device=device)
 
     expected = torch.tensor([False, False, False, False, False, True], device=device)
@@ -519,15 +463,15 @@ def test_is_intersect2():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     B = torch.tensor([
-        [[0,0,1],[0,0,1],[1,0,0],[0,1,0],[1,1,1]],
-        [[0,0,1],[0,0,1],[0,0,1],[1,0,0],[1,1,1]],
-        [[1,0,0],[1,0,0],[1,0,0],[1,0,0],[1,1,1]],
-        [[1,0,0],[1,0,0],[0,1,0],[1,0,0],[1,1,1]]
+        [[0,0,1],[0,0,1],[1,0,0],[0,1,0]],
+        [[0,0,1],[0,0,1],[0,0,1],[1,0,0]],
+        [[1,0,0],[1,0,0],[1,0,0],[1,0,0]],
+        [[1,0,0],[1,0,0],[0,1,0],[1,0,0]]
     ], dtype=torch.int32, device=device)
 
     R = torch.tensor([
-        [[1,1,1],[1,1,1],[1,1,1],[1,0,1],[0,1,1]],
-        [[1,1,1],[1,1,1],[0,1,1],[0,1,1],[0,1,1]]
+        [[1,1,1],[1,1,1],[1,1,1],[1,0,1]],
+        [[1,1,1],[1,1,1],[0,1,1],[0,1,1]]
     ], dtype=torch.int32, device=device)
 
     expected = torch.tensor([False, True, True, True], device=device)
@@ -539,11 +483,10 @@ def test_from_Bbound_to_comps_st1():
         [0, 0, 1],
         [1, 0, 0],
         [1, 0, 0],
-        [0, 1, 0],
-        [1, 1, 1]
+        [0, 1, 0]
     ], dtype=torch.int32)
 
-    row_names = ['x1', 'x2', 'x3', 'x4', 'sys']
+    row_names = ['x1', 'x2', 'x3', 'x4']
     expected = {'x1': 2, 'x2': 0, 'x3': 0, 'x4': 1}
 
     result = tsum.from_Bbound_to_comps_st(B, row_names)
@@ -554,13 +497,13 @@ def test_is_subset1():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     Rnew = torch.tensor(
-        [[0,1,1],[0,1,1],[0,0,1],[1,1,1],[0,1,1]],
+        [[0,1,1],[0,1,1],[0,0,1],[1,1,1]],
         dtype=torch.int32, device=device
     )
 
     R = torch.tensor([
-        [[1,1,1],[1,1,1],[1,1,1],[0,0,1],[0,1,1]],
-        [[1,1,1],[1,1,1],[0,1,1],[0,1,1],[0,1,1]]
+        [[1,1,1],[1,1,1],[1,1,1],[0,0,1]],
+        [[1,1,1],[1,1,1],[0,1,1],[0,1,1]]
     ], dtype=torch.int32, device=device)
 
     is_mat_subset, is_tensor_subset = tsum.is_subset(Rnew, R)
@@ -573,13 +516,13 @@ def test_is_subset2():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     Rnew = torch.tensor(
-        [[0,1,1],[0,1,1],[0,0,1],[1,1,1],[0,1,1]],
+        [[0,1,1],[0,1,1],[0,0,1],[1,1,1]],
         dtype=torch.int32, device=device
     )
 
     R = torch.tensor([
-        [[0,0,1],[0,0,1],[0,0,1],[0,1,1],[0,0,1]],
-        [[1,1,1],[1,1,1],[0,1,1],[1,1,1],[0,1,1]]
+        [[0,0,1],[0,0,1],[0,0,1],[0,1,1]],
+        [[1,1,1],[1,1,1],[0,1,1],[1,1,1]]
     ], dtype=torch.int32, device=device)
 
     is_mat_subset, is_tensor_subset = tsum.is_subset(Rnew, R)
@@ -592,8 +535,8 @@ def test_find_first_nonempty_combination1():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     R = torch.tensor([
-        [[0,0,1],[0,0,1],[0,0,1],[0,1,1],[0,0,1]],
-        [[1,1,1],[1,1,1],[0,1,1],[1,1,1],[0,1,1]]
+        [[0,0,1],[0,0,1],[0,0,1],[0,1,1]],
+        [[1,1,1],[1,1,1],[0,1,1],[1,1,1]]
     ], dtype=torch.int32, device=device)
 
     Rcs = []
@@ -603,7 +546,7 @@ def test_find_first_nonempty_combination1():
         Rcs.append(Ri_c)
 
     mat = tsum.find_first_nonempty_combination(Rcs, verbose=False)
-    expected = torch.tensor([[1,1,0], [1,1,1], [1,0,0], [1,1,1],[1,1,1]], dtype=torch.int32, device=device)
+    expected = torch.tensor([[1,1,0], [1,1,1], [1,0,0], [1,1,1]], dtype=torch.int32, device=device)
     assert torch.equal(mat, expected), f"Expected {expected}, but got {mat}"
 
 def test_find_first_nonempty_combination2():
@@ -632,22 +575,22 @@ def to_set_of_tuples(T: torch.Tensor):
 def test_merge_branches1():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     B = torch.tensor([
-    [[1,0,0],[0,0,1],[1,0,0],[0,0,1],[0,1,1]], # merged with 6th branch
-    [[0,1,1],[0,1,0],[1,0,0],[0,0,1],[0,1,1]], 
-    [[0,1,1],[1,0,0],[0,1,1],[0,0,1],[0,1,1]],
-    [[1,0,0],[0,0,1],[0,1,1],[1,1,0],[0,1,1]], # merged with 7th branch
-    [[0,1,1],[0,1,0],[0,1,1],[1,1,0],[0,1,1]], 
-    [[0,1,1],[0,0,1],[1,0,0],[0,0,1],[0,1,1]],
-    [[0,1,1],[0,0,1],[0,1,1],[1,1,0],[0,1,1]]
+    [[1,0,0],[0,0,1],[1,0,0],[0,0,1]], # merged with 6th branch
+    [[0,1,1],[0,1,0],[1,0,0],[0,0,1]], 
+    [[0,1,1],[1,0,0],[0,1,1],[0,0,1]],
+    [[1,0,0],[0,0,1],[0,1,1],[1,1,0]], # merged with 7th branch
+    [[0,1,1],[0,1,0],[0,1,1],[1,1,0]], 
+    [[0,1,1],[0,0,1],[1,0,0],[0,0,1]],
+    [[0,1,1],[0,0,1],[0,1,1],[1,1,0]]
     ], dtype=torch.int32, device=device)
 
 
     expected = torch.tensor([
-    [[0,1,1],[0,1,0],[1,0,0],[0,0,1],[0,1,1]],
-    [[0,1,1],[1,0,0],[0,1,1],[0,0,1],[0,1,1]], 
-    [[0,1,1],[0,1,0],[0,1,1],[1,1,0],[0,1,1]],
-    [[1,1,1],[0,0,1],[1,0,0],[0,0,1],[0,1,1]],
-    [[1,1,1],[0,0,1],[0,1,1],[1,1,0],[0,1,1]]
+    [[0,1,1],[0,1,0],[1,0,0],[0,0,1]],
+    [[0,1,1],[1,0,0],[0,1,1],[0,0,1]], 
+    [[0,1,1],[0,1,0],[0,1,1],[1,1,0]],
+    [[1,1,1],[0,0,1],[1,0,0],[0,0,1]],
+    [[1,1,1],[0,0,1],[0,1,1],[1,1,0]]
     ], dtype=torch.int32, device=device)
 
     result = tsum.merge_branches(B)
@@ -663,18 +606,18 @@ def test_merge_branches1():
 def test_merge_branches2():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     B = torch.tensor([
-    [[1,0,0],[1,0,0],[0,1,1],[0,1,1],[0,1,1]], # merged with 3rd branch
-    [[1,0,0],[0,1,1],[1,0,0],[0,1,1],[0,1,1]], # merged with 4th branch
-    [[0,1,1],[1,0,0],[0,1,1],[0,1,1],[0,1,1]],
-    [[0,1,1],[0,1,1],[1,0,0],[0,1,1],[0,1,1]],
-    [[1,1,1],[0,1,1],[0,1,1],[1,1,1],[0,1,1]]
+    [[1,0,0],[1,0,0],[0,1,1],[0,1,1]], # merged with 3rd branch
+    [[1,0,0],[0,1,1],[1,0,0],[0,1,1]], # merged with 4th branch
+    [[0,1,1],[1,0,0],[0,1,1],[0,1,1]],
+    [[0,1,1],[0,1,1],[1,0,0],[0,1,1]],
+    [[1,1,1],[0,1,1],[0,1,1],[1,1,1]]
     ], dtype=torch.int32, device=device)
 
 
     expected = torch.tensor([
-    [[1,1,1],[0,1,1],[0,1,1],[1,1,1],[0,1,1]],
-    [[1,1,1],[1,0,0],[0,1,1],[0,1,1],[0,1,1]],
-    [[1,1,1],[0,1,1],[1,0,0],[0,1,1],[0,1,1]]
+    [[1,1,1],[0,1,1],[0,1,1],[1,1,1]],
+    [[1,1,1],[1,0,0],[0,1,1],[0,1,1]],
+    [[1,1,1],[0,1,1],[1,0,0],[0,1,1]]
     ], dtype=torch.int32, device=device)
 
 
@@ -689,15 +632,15 @@ def test_merge_branches2():
 def test_merge_branches3():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     B = torch.tensor([
-    [[1,1,1],[1,1,1],[1,0,0],[0,0,1],[0,1,1]],
-    [[1,1,1],[0,1,1],[0,1,1],[0,1,1],[0,1,1]], # merged with 3rd branch
-    [[1,1,1],[1,0,0],[0,1,1],[0,1,1],[0,1,1]]
+    [[1,1,1],[1,1,1],[1,0,0],[0,0,1]],
+    [[1,1,1],[0,1,1],[0,1,1],[0,1,1]], # merged with 3rd branch
+    [[1,1,1],[1,0,0],[0,1,1],[0,1,1]]
     ], dtype=torch.int32, device=device)
 
 
     expected = torch.tensor([
-    [[1,1,1],[1,1,1],[1,0,0],[0,0,1],[0,1,1]],
-    [[1,1,1],[1,1,1],[0,1,1],[0,1,1],[0,1,1]]
+    [[1,1,1],[1,1,1],[1,0,0],[0,0,1]],
+    [[1,1,1],[1,1,1],[0,1,1],[0,1,1]]
     ], dtype=torch.int32, device=device)
 
     result = tsum.merge_branches(B)
@@ -710,9 +653,9 @@ def test_merge_branches3():
 def test_get_complementary_events_nondisjoint1():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    R1 = torch.tensor([[1,1,1], [1,1,1], [1,1,1], [0,0,1], [0,1,1]], dtype=torch.int32, device=device)
+    R1 = torch.tensor([[1,1,1], [1,1,1], [1,1,1], [0,0,1]], dtype=torch.int32, device=device)
 
-    expected = torch.tensor([[[1,1,1], [1,1,1], [1,1,1], [1,1,0], [1,1,1]]], dtype=torch.int32, device=device)
+    expected = torch.tensor([[[1,1,1], [1,1,1], [1,1,1], [1,1,0]]], dtype=torch.int32, device=device)
 
     result = tsum.get_complementary_events_nondisjoint(R1)
 
@@ -721,11 +664,11 @@ def test_get_complementary_events_nondisjoint1():
 def test_get_complementary_events_nondisjoint2():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    R2 = torch.tensor([[1,1,1], [1,1,0], [1,0,0], [1,0,0], [1,0,0]], dtype=torch.int32, device=device)
+    R2 = torch.tensor([[1,1,1], [1,1,0], [1,0,0], [1,0,0]], dtype=torch.int32, device=device)
 
-    expected = torch.tensor([[[1,1,1], [0,0,1], [1,1,1], [1,1,1], [1,1,1]],
-                             [[1,1,1], [1,1,1], [0,1,1], [1,1,1], [1,1,1]],
-                             [[1,1,1], [1,1,1], [1,1,1], [0,1,1], [1,1,1]]], dtype=torch.int32, device=device)
+    expected = torch.tensor([[[1,1,1], [0,0,1], [1,1,1], [1,1,1]],
+                             [[1,1,1], [1,1,1], [0,1,1], [1,1,1]],
+                             [[1,1,1], [1,1,1], [1,1,1], [0,1,1]]], dtype=torch.int32, device=device)
 
     result = tsum.get_complementary_events_nondisjoint(R2)
 
@@ -939,13 +882,13 @@ def test_apply_merges3(def_B3):
 def ex_surv_fail_rules():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     rules_mat_surv = torch.tensor([
-        [[1, 1, 1], [1, 1, 1], [1, 1, 1], [0, 0, 1], [0, 1, 1]],
-        [[1, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1], [0, 1, 1]],
-        [[1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1]]
+        [[1, 1, 1], [1, 1, 1], [1, 1, 1], [0, 0, 1]],
+        [[1, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1]],
+        [[1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 1, 1]]
     ], dtype=torch.int32, device=device)
     rules_mat_fail = torch.tensor([
-        [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0], [1, 0, 0]],
-        [[1, 0, 0], [1, 0, 0], [1, 0, 0], [1, 1, 1], [1, 0, 0]]
+        [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0]],
+        [[1, 0, 0], [1, 0, 0], [1, 0, 0], [1, 1, 1]]
     ], dtype=torch.int32, device=device)
 
     probs = torch.tensor([
@@ -961,15 +904,15 @@ def ex_surv_fail_rules():
 def ex_surv_fail_rules_with_dict():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    row_names = ['x1', 'x2', 'x3', 'x4', 'sys']
+    row_names = ['x1', 'x2', 'x3', 'x4']
     rules_mat_surv = torch.tensor([
-        [[1, 1, 1], [1, 1, 1], [1, 1, 1], [0, 0, 1], [0, 1, 1]],
-        [[1, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1], [0, 1, 1]],
-        [[1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1]]
+        [[1, 1, 1], [1, 1, 1], [1, 1, 1], [0, 0, 1]],
+        [[1, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1]],
+        [[1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 1, 1]]
     ], dtype=torch.int32, device=device)
     rules_mat_fail = torch.tensor([
-        [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0], [1, 0, 0]],
-        [[1, 0, 0], [1, 0, 0], [1, 0, 0], [1, 1, 1], [1, 0, 0]]
+        [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0]],
+        [[1, 0, 0], [1, 0, 0], [1, 0, 0], [1, 1, 1]]
     ], dtype=torch.int32, device=device)
 
     rules_surv = [{'x4': ('>=', 2), 'sys': ('>=', 1)},
@@ -980,37 +923,21 @@ def ex_surv_fail_rules_with_dict():
 
     return rules_mat_surv, rules_mat_fail, rules_surv, rules_fail, row_names
 
-def test_sample_complementary_events(ex_surv_fail_rules):
-
-    rules_mat_surv, rules_mat_fail, probs = ex_surv_fail_rules
-
-    fail_cand, n_samp0 = tsum.sample_complementary_events(probs, rules_mat_surv, rules_mat_fail, rules_st = 'surv')
-
-    assert fail_cand.shape == (rules_mat_fail.shape[1], rules_mat_fail.shape[2])
-    assert n_samp0 > 0
-
-    surv_cand, n_samp1 = tsum.sample_complementary_events(probs, rules_mat_fail, rules_mat_surv, rules_st = 'fail')
-
-    assert surv_cand.shape == (rules_mat_surv.shape[1], rules_mat_surv.shape[2])
-    assert n_samp1 > 0
-
 def test_mask_from_first_one1():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    x = torch.tensor([[1, 0, 0], [0, 1, 0], [1, 0, 0], [0, 1, 0], [1, 1, 1]], device='cuda:0', dtype=torch.int32)
+    x = torch.tensor([[1, 0, 0], [0, 1, 0], [1, 0, 0], [0, 1, 0]], device='cuda:0', dtype=torch.int32)
 
     x_after = tsum.mask_from_first_one(x, mode="after")
     x_after_expected = torch.tensor([[1, 1, 1],
         [0, 1, 1],
         [1, 1, 1],
-        [0, 1, 1],
-        [1, 1, 1]], device='cuda:0', dtype=torch.int32)
+        [0, 1, 1]], device='cuda:0', dtype=torch.int32)
 
     x_before = tsum.mask_from_first_one(x, mode="before")
     x_before_expected = torch.tensor([[1, 0, 0],
         [1, 1, 0],
         [1, 0, 0],
-        [1, 1, 0],
-        [1, 1, 1]], device='cuda:0', dtype=torch.int32)
+        [1, 1, 0]], device='cuda:0', dtype=torch.int32)
 
     assert torch.equal(x_after, x_after_expected), f"Expected {x_after_expected}, but got {x_after}"
     assert torch.equal(x_before, x_before_expected), f"Expected {x_before_expected}, but got {x_before}"
@@ -1020,37 +947,31 @@ def test_mask_from_first_one2():
     x = torch.tensor([[[1, 0, 0],
                       [0, 0, 1],
                       [0, 1, 0],
-                      [1, 0, 0],
-                      [1, 1, 1]],
+                      [1, 0, 0]],
                       [[0, 1, 0],
                       [0, 1, 0],
                       [0, 1, 0],
-                      [1, 0, 0],
-                      [1, 1, 1]]], device='cuda:0', dtype=torch.int32)
+                      [1, 0, 0]]], device='cuda:0', dtype=torch.int32)
 
     x_after = tsum.mask_from_first_one(x, mode="after")
     x_after_expected = torch.tensor([[[1, 1, 1],
                       [0, 0, 1],
                       [0, 1, 1],
-                      [1, 1, 1],
                       [1, 1, 1]],
                       [[0, 1, 1],
                       [0, 1, 1],
                       [0, 1, 1],
-                      [1, 1, 1],
                       [1, 1, 1]]], device='cuda:0', dtype=torch.int32)
 
     x_before = tsum.mask_from_first_one(x, mode="before")
     x_before_expected = torch.tensor([[[1, 0, 0],
                       [1, 1, 1],
                       [1, 1, 0],
-                      [1, 0, 0],
-                      [1, 1, 1]],
+                      [1, 0, 0]],
                       [[1, 1, 0],
                       [1, 1, 0],
                       [1, 1, 0],
-                      [1, 0, 0],
-                      [1, 1, 1]]], device='cuda:0', dtype=torch.int32)
+                      [1, 0, 0]]], device='cuda:0', dtype=torch.int32)
 
     assert torch.equal(x_after, x_after_expected), f"Expected {x_after_expected}, but got {x_after}"
     assert torch.equal(x_before, x_before_expected), f"Expected {x_before_expected}, but got {x_before}"
@@ -1067,8 +988,8 @@ def test_update_rules1(ex_surv_fail_rules_with_dict):
                            {'x1': ('<=', 0), 'x3': ('<=', 0), 'sys': ('<=', 0)}]
 
     expected_rules_mat = torch.tensor([
-        [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0], [1, 0, 0]],
-        [[1, 0, 0], [1, 1, 1], [1, 0, 0], [1, 1, 1], [1, 0, 0]]
+        [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0]],
+        [[1, 0, 0], [1, 1, 1], [1, 0, 0], [1, 1, 1]]
     ], dtype=torch.int32, device=rules_mat_fail.device)
 
     assert rules_dict == expected_rules_dict, f"Expected {expected_rules_dict}, but got {rules_dict}"
@@ -1086,10 +1007,10 @@ def test_update_rules2(ex_surv_fail_rules_with_dict):
                            {'x1': ('>=', 1), 'x2': ('>=', 2), 'sys': ('>=', 1)}]
 
     expected_rules_mat = torch.tensor([
-        [[1, 1, 1], [1, 1, 1], [1, 1, 1], [0, 0, 1], [0, 1, 1]],
-        [[1, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1], [0, 1, 1]],
-        [[1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1]],
-        [[0, 1, 1], [0, 0, 1], [1, 1, 1], [1, 1, 1], [0, 1, 1]]
+        [[1, 1, 1], [1, 1, 1], [1, 1, 1], [0, 0, 1]],
+        [[1, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1]],
+        [[1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 1, 1]],
+        [[0, 1, 1], [0, 0, 1], [1, 1, 1], [1, 1, 1]]
     ], dtype=torch.int32, device=rules_mat_surv.device)
 
     assert rules_dict == expected_rules_dict, f"Expected {expected_rules_dict}, but got {rules_dict}"
@@ -1106,9 +1027,9 @@ def test_update_rules3(ex_surv_fail_rules_with_dict):
                            {'x2': ('>=', 1), 'x4': ('>=', 1), 'sys': ('>=', 1)}]
 
     expected_rules_mat = torch.tensor([
-        [[1, 1, 1], [1, 1, 1], [1, 1, 1], [0, 0, 1], [0, 1, 1]],
-        [[1, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1], [0, 1, 1]],
-        [[1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1]]
+        [[1, 1, 1], [1, 1, 1], [1, 1, 1], [0, 0, 1]],
+        [[1, 1, 1], [1, 1, 1], [0, 1, 1], [0, 1, 1]],
+        [[1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 1, 1]]
     ], dtype=torch.int32, device=rules_mat_surv.device)
 
     assert rules_dict == expected_rules_dict, f"Expected {expected_rules_dict}, but got {rules_dict}"
@@ -1124,8 +1045,8 @@ def test_update_rules4(ex_surv_fail_rules_with_dict):
                            {'x1': ('<=', 0),'x2': ('<=', 0), 'x3': ('<=', 0), 'sys': ('<=', 0)}]
 
     expected_rules_mat = torch.tensor([
-        [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0], [1, 0, 0]],
-        [[1, 0, 0], [1, 0, 0], [1, 0, 0], [1, 1, 1], [1, 0, 0]]
+        [[1, 1, 1], [1, 1, 0], [1, 0, 0], [1, 0, 0]],
+        [[1, 0, 0], [1, 0, 0], [1, 0, 0], [1, 1, 1]]
     ], dtype=torch.int32, device=rules_mat_fail.device)
 
     assert rules_dict == expected_rules_dict, f"Expected {expected_rules_dict}, but got {rules_dict}"
@@ -1144,22 +1065,22 @@ def surv_fail_rules_ex_4comps():
                   {'x3': ('<=', 0), 'sys': ('<=', 0)},
                   {'x4': ('<=', 0), 'sys': ('<=', 0)}]
 
-    row_names = ['x1', 'x2', 'x3', 'x4', 'sys']
+    row_names = ['x1', 'x2', 'x3', 'x4']
 
     return surv_rules, fail_rules, row_names
 
 def test_minimise_surv_states_random1(surv_fail_rules_ex_4comps):
     surv_rules, fail_rules, row_names = surv_fail_rules_ex_4comps
 
-    comps_st = {x: 2 for x in row_names if x != 'sys'}
+    comps_st = {x: 2 for x in row_names}
 
     def sfun(comps_st):
         for s in surv_rules:
-            if all(comps_st[k] >= v[1] for k, v in s.items() if k != 'sys'):
-                return None, 's', None
-        return None, 'f', None
+            if all(comps_st[k] >= v[1] for k, v in s.items() if k in comps_st):
+                return None, 1, None
+        return None, 0, None
 
-    new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, 1)
+    new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, sys_surv_st=1)
     assert new_rule in surv_rules, f"Expected one of {surv_rules}, but got {new_rule}"
 
 def test_minimise_surv_states_random2(surv_fail_rules_ex_4comps):
@@ -1170,11 +1091,11 @@ def test_minimise_surv_states_random2(surv_fail_rules_ex_4comps):
 
     def sfun(comps_st):
         for s in surv_rules:
-            if all(comps_st[k] >= v[1] for k, v in s.items() if k != 'sys'):
-                return None, 's', None
-        return None, 'f', None
+            if all(comps_st[k] >= v[1] for k, v in s.items() if k in comps_st):
+                return None, 1, None
+        return None, 0, None
 
-    new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, 1)
+    new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, sys_surv_st=1)
     assert new_rule in surv_rules, f"Expected one of {surv_rules}, but got {new_rule}"
 
 def test_minimise_fail_states_random1(surv_fail_rules_ex_4comps):
@@ -1184,11 +1105,11 @@ def test_minimise_fail_states_random1(surv_fail_rules_ex_4comps):
 
     def sfun(comps_st):
         for s in surv_rules:
-            if all(comps_st[k] >= v[1] for k, v in s.items() if k != 'sys'):
-                return None, 's', None
-        return None, 'f', None
+            if all(comps_st[k] >= v[1] for k, v in s.items() if k in comps_st):
+                return None, 1, None
+        return None, 0, None
 
-    new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, max_state = 2, sys_fail_st = 0)
+    new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, sys_fail_st=0, max_state=2)
     assert new_rule in fail_rules, f"Got {new_rule}"
 
 def test_minimise_fail_states_random2(surv_fail_rules_ex_4comps):
@@ -1199,9 +1120,9 @@ def test_minimise_fail_states_random2(surv_fail_rules_ex_4comps):
 
     def sfun(comps_st):
         for s in surv_rules:
-            if all(comps_st[k] >= v[1] for k, v in s.items() if k != 'sys'):
-                return None, 's', None
-        return None, 'f', None
+            if all(comps_st[k] >= v[1] for k, v in s.items() if k in comps_st):
+                return None, 1, None
+        return None, 0, None
 
-    new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, max_state = 2, sys_fail_st = 0)
+    new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, sys_fail_st=0, max_state=2)
     assert new_rule in fail_rules, f"Got {new_rule}"
