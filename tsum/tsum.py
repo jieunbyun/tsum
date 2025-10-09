@@ -60,7 +60,7 @@ def get_min_surv_comps_st(comps_st, sys_surv_st):
 
 def minimise_surv_states_random(
     comps_st: Dict[str, int],
-    sfun,
+    sfun: Callable[[Dict[Any, int]], Tuple[Any, Tuple[str, int], Dict[Any, int]]],
     sys_surv_st: int,
     *,
     fval: Optional[Any] = None,
@@ -75,10 +75,10 @@ def minimise_surv_states_random(
     Algorithm (given a random permutation of components):
       - Try lowering each component by `step` (e.g., 1).
       - Call sfun(modified_state).
-        Expect sfun to return a tuple where the 2nd element is 's' or 'f'.
-      - If status == 's': keep the lowered value and continue cycling.
+        Expect sfun to return a tuple where the 2nd element is int that represents a system state.
+      - If status >= sys_surv_st: keep the lowered value and continue cycling.
         If the component reaches `min_state`, remove it (can't lower further).
-      - If status == 'f': revert the change and remove that component (no further attempts).
+      - If status < sys_fail_st: revert the change and remove that component (no further attempts).
 
     Stops when all components have been removed from the candidate pool.
 
@@ -132,7 +132,7 @@ def minimise_surv_states_random(
             removed_on_failure.append(comp)
             continue
 
-        if status == 's':
+        if status >= sys_surv_st:
             # Keep lowered value
             if state[comp] <= min_state:
                 dq.popleft()
@@ -162,10 +162,10 @@ def minimise_surv_states_random(
 def minimise_fail_states_random(
     comps_st: Dict[str, int],
     sfun,
+    sys_fail_st: int,
     max_state: int,
     *,
     fval: Optional[Any] = None,
-    sys_fail_st: int = 0,
     step: int = 1,
     seed: Optional[int] = None,
     exclude_keys: Iterable[str] = ("sys",)
@@ -176,10 +176,10 @@ def minimise_fail_states_random(
     Algorithm (given a random permutation of components):
       - Try increasing each component by `step` (e.g., 1).
       - Call sfun(modified_state).
-        Expect sfun to return a tuple where the 2nd element is 's' or 'f'.
-      - If status == 'f': keep the increased value and continue cycling.
+        Expect sfun to return a tuple where the 2nd element is an int representing a system state.
+      - If status <= sys_fail_st: keep the increased value and continue cycling.
         If the component reaches `max_state`, remove it (can't increase further).
-      - If status == 's': revert the change and remove that component (no further attempts).
+      - If status > sys_fail_st: revert the change and remove that component (no further attempts).
 
     Stops when all components have been removed from the candidate pool.
 
@@ -234,7 +234,7 @@ def minimise_fail_states_random(
             removed_on_survival.append(comp)
             continue
 
-        if status == 'f':
+        if status <= sys_fail_st:
             # Keep increased value
             if state[comp] >= max_state:
                 dq.popleft()
@@ -267,7 +267,7 @@ def from_rule_dict_to_mat(rule_dict, row_names, max_st):
 
     Args:
         rule_dict (dict): {name: ('comparison_operator', state (int))}
-        row_names (list): list of component or system names associated with each row in order
+        row_names (list): list of component names associated with each row in order
         max_st (int): the highest state
 
     Returns:
@@ -307,10 +307,9 @@ def from_Bbound_to_comps_st(Bbound, row_names):
         comps_st (dict): {component_name: state_index}
     """
     n_var, n_state = Bbound.shape
-    n_comp = n_var - 1  # exclude system event
 
     comps_st = {}
-    for i in range(n_comp):
+    for i in range(n_var):
         row = Bbound[i]
         nz = torch.nonzero(row, as_tuple=False)
         if len(nz) > 0:
@@ -382,26 +381,25 @@ def get_complementary_events(mat):
         Bnew: (n_comps_kept, n_vars, n_state)
     """
     n_vars, n_state = mat.shape
-    n_comps = n_vars - 1  # exclude the system event (last row)
 
     # Prepare output tensor
-    B = torch.ones((n_comps, n_vars, n_state), dtype=mat.dtype, device=mat.device)
+    B = torch.ones((n_vars, n_vars, n_state), dtype=mat.dtype, device=mat.device)
 
     # Broadcast mat for all i
-    mat_exp = mat.unsqueeze(0).expand(n_comps, n_vars, n_state)
+    mat_exp = mat.unsqueeze(0).expand(n_vars, n_vars, n_state)
 
     # Create lower-triangular mask to copy rows before i
-    mask = torch.arange(n_vars, device=mat.device).unsqueeze(0) < torch.arange(n_comps, device=mat.device).unsqueeze(1)  # (n_comps, n_vars)
-    mask = mask.unsqueeze(-1).expand(-1, -1, n_state)  # (n_comps, n_vars, n_state)
+    mask = torch.arange(n_vars, device=mat.device).unsqueeze(0) < torch.arange(n_vars, device=mat.device).unsqueeze(1)  # (n_vars, n_vars)
+    mask = mask.unsqueeze(-1).expand(-1, -1, n_state)  # (n_vars, n_vars, n_state)
     B[mask] = mat_exp[mask]  # copy rows before i
 
     # Flip row i in each batch
-    flip_mask = torch.eye(n_comps, dtype=torch.bool, device=mat.device).unsqueeze(-1).expand(-1, -1, n_state)  # (n_comps, n_comps, n_state)
-    B[:n_comps, :n_comps][flip_mask] = 1 - mat_exp[:n_comps, :n_comps][flip_mask]
+    flip_mask = torch.eye(n_vars, dtype=torch.bool, device=mat.device).unsqueeze(-1).expand(-1, -1, n_state)  # (n_vars, n_vars, n_state)
+    B[:n_vars, :n_vars][flip_mask] = 1 - mat_exp[:n_vars, :n_vars][flip_mask]
 
     # Remove combinations where any row (excluding system) is all-zero across states
-    invalid_mask = (B[:, :-1, :] == 0).all(dim=2)  # shape: (n_comps, n_comps)
-    keep_mask = ~invalid_mask.any(dim=1)          # shape: (n_comps,)
+    invalid_mask = (B[:, :-1, :] == 0).all(dim=2)  # shape: (n_vars, n_vars)
+    keep_mask = ~invalid_mask.any(dim=1)          # shape: (n_vars,)
     Bnew = B[keep_mask]
 
     return Bnew
@@ -412,16 +410,13 @@ def get_branch_probs(tensor, prob):
 
     Args:
         tensor: (n_br, n_var, n_state) - binary indicator of active states per variable per branch
-        prob:   (n_var - 1, n_state)   - probability per state for each component variable
+        prob:   (n_var, n_state)   - probability per state for each component variable
 
     Returns:
         Bprob: (n_br,) - probability per branch
     """
     n_br, n_var, n_state = tensor.shape
     device = tensor.device
-
-    # Cut off system row (last one)
-    tensor = tensor[:, :-1, :]  # shape: (n_br, n_comps, n_state)
 
     # Expand to match tensor: (n_br, n_comps, n_state)
     prob_exp = prob.unsqueeze(0).expand(n_br, -1, -1)
@@ -465,7 +460,8 @@ def get_boundary_branches(tensor: torch.Tensor) -> torch.Tensor:
         x = tensor               # (n_br, n_vars, n_state)
 
     n_br, n_vars, n_state = x.shape
-    n_comps = n_vars - 1
+    # n_comps = n_vars - 1 # OBSOLETE: system row is now excluded from input
+    n_comps = n_vars
 
     # Work only on component rows (exclude final system row)
     comp = x[:, :n_comps, :]             # (n_br, n_comps, n_state)
@@ -494,13 +490,8 @@ def get_boundary_branches(tensor: torch.Tensor) -> torch.Tensor:
     lower.scatter_(-1, first_idx.unsqueeze(-1), 1)
     upper.scatter_(-1, last_idx.unsqueeze(-1), 1)
 
-    # Append system row of all 1s
-    system = torch.ones((n_br, 1, n_state), dtype=x.dtype, device=x.device)
-    B_lower = torch.cat([lower, system], dim=1)  # (n_br, n_vars, n_state)
-    B_upper = torch.cat([upper, system], dim=1)  # (n_br, n_vars, n_state)
-
     # Stack branches: [upper; lower] along branch dimension
-    out = torch.cat([B_upper, B_lower], dim=0)   # (2*n_br, n_vars, n_state)
+    out = torch.cat([upper, lower], dim=0)   # (2*n_br, n_vars, n_state)
 
     # Squeeze back if original was 2D: return shape (2, n_vars, n_state)
     return out if not squeeze_back else out.view(2, n_vars, n_state)
@@ -508,7 +499,8 @@ def get_boundary_branches(tensor: torch.Tensor) -> torch.Tensor:
 
 def get_boundary_rules(tensor):
     n_br, n_vars, n_state = tensor.shape
-    n_comps = n_vars - 1
+    #n_comps = n_vars - 1 # exclude system event (last row) <- OUTDATED: system row is now excluded from input
+    n_comps = n_vars
 
     comp_tensor = tensor[:, :n_comps, :]  # (n_br, n_comps, n_state)
 
@@ -534,11 +526,13 @@ def get_boundary_rules(tensor):
     lower = (state_idx <= first_idx.unsqueeze(-1)).to(tensor.dtype)
     ####################################################################
 
-    # Append system row of all 1s
-    system = torch.ones((n_br, 1, n_state), dtype=tensor.dtype, device=tensor.device)
+    # Append system row of all 1s 
+    #system = torch.ones((n_br, 1, n_state), dtype=tensor.dtype, device=tensor.device)
 
-    B_upper = torch.cat([upper, system], dim=1)
-    B_lower = torch.cat([lower, system], dim=1)
+    #B_upper = torch.cat([upper, system], dim=1)
+    B_upper = upper
+    #B_lower = torch.cat([lower, system], dim=1)
+    B_lower = lower
 
     return torch.cat([B_upper, B_lower], dim=0)  # shape: (2*n_br, n_vars, n_state)
 
@@ -813,16 +807,15 @@ def get_complementary_events_nondisjoint(mat: torch.Tensor) -> torch.Tensor:
     NOTE: The resulted events are not disjoint.
 
     Returns:
-        Bnew: (n_comps_kept, n_vars, n_state)
+        Bnew: (n_events_kept, n_vars, n_state)
     """
     n_vars, n_state = mat.shape
-    n_comps = n_vars - 1  # exclude the system event (last row)
 
     # Prepare output tensor
-    B = torch.ones((n_comps, n_vars, n_state), dtype=mat.dtype, device=mat.device)
+    B = torch.ones((n_vars, n_vars, n_state), dtype=mat.dtype, device=mat.device)
 
     # Flip row i in batch i
-    idx = torch.arange(n_comps, device=mat.device)
+    idx = torch.arange(n_vars, device=mat.device)
     if mat.dtype == torch.bool:
         B[idx, idx, :] = ~mat[idx, :]
     else:
@@ -830,8 +823,8 @@ def get_complementary_events_nondisjoint(mat: torch.Tensor) -> torch.Tensor:
         B[idx, idx, :] = 1 - mat[idx, :]
 
     # Remove combinations where any row (excluding system) is all-zero across states
-    invalid_mask = (B[:, :-1, :] == 0).all(dim=2)  # shape: (n_comps, n_comps)
-    keep_mask = ~invalid_mask.any(dim=1)          # shape: (n_comps,)
+    invalid_mask = (B == 0).all(dim=2)  # shape: (n_vars, n_vars)
+    keep_mask = ~invalid_mask.any(dim=1)          # shape: (n_vars,)
     Bnew = B[keep_mask]
 
     return Bnew
@@ -962,7 +955,8 @@ def sample_new_comp_st_to_test(probs, rules_mat, B=1_024, max_iters=1_000):
 
     device = probs.device
     n_comp, n_state = probs.shape
-    n_var = n_comp + 1  # including system event
+    #n_var = n_comp + 1  # including system event <- OUTDATED: system row is now excluded from input
+    n_var = n_comp
 
     if len(rules_mat) == 0:
         all_samples = torch.ones((1, n_var, n_state), dtype=torch.int32, device=device)
@@ -1050,214 +1044,7 @@ def sample_new_comp_st_to_test(probs, rules_mat, B=1_024, max_iters=1_000):
         elif iter == max_iters - 1:
             print("Max iterations reached without finding a valid sample.")
             return None, all_samples
-        
-def sample_complementary_events(probs, rules_mat, rules_mat_other, rules_st = 'fail', B=1_024, max_iters=1_000):
-    """
-    Sample complementary events to the given rules_mat (that represents either fail or surv), ensuring they are not subsets of rules_mat_other.
-    """
-    device = probs.device
-    n_comp, n_state = probs.shape
-    n_var = n_comp + 1  # including system event
 
-    n_samp = 0
-    for iter in range(max_iters):
-        n_samp += B
-
-        # Start with all-ones batch
-        samples_b = torch.ones((B, n_var, n_state), dtype=torch.int32, device=device)
-
-        # Strategy 1: The same permutation applies within a batch
-        # rules_ord = np.random.permutation(len(rules_mat))
-        # Strategy 2: Sort the rules by their probs
-        rules_probs = get_branch_probs(rules_mat, probs)
-        rules_ord = torch.argsort(rules_probs, descending=True)
-
-        # Sampling starts.
-        for r_idx in rules_ord:
-
-            r_mat = rules_mat[r_idx]
-            r_mat_c = get_complementary_events_nondisjoint(r_mat)
-
-            # Decide whether to sample: skip samples that already contradicts r_mat (to obtain minimal rules)
-            is_sampled = torch.ones((B,), dtype=torch.bool, device=device)
-            for rc1 in r_mat_c:
-                flag1, flag2 = is_subset(rc1, samples_b)
-
-                is_sampled[flag2] = False
-
-            # Select a r_mat_c
-            r_mat_c_probs = get_branch_probs(r_mat_c, probs)
-            r_mat_c_probs = r_mat_c_probs / r_mat_c_probs.sum()
-            idx = torch.multinomial(r_mat_c_probs, num_samples=B, replacement=True)
-
-            # Update samples if is_sampled == True
-            samples_b[is_sampled] = samples_b[is_sampled] * r_mat_c[idx[is_sampled]].squeeze(0)
-
-        # Check if there are events with positive prob
-        real_prs = get_branch_probs(samples_b, probs)
-        samples_b = samples_b[real_prs > 0]
-        real_prs = real_prs[real_prs > 0]
-
-        if samples_b.shape[0] > 0:
-
-            samples_b_bnd = get_boundary_branches(samples_b)
-            n_samp_b = samples_b.shape[0]
-
-            if rules_st == 'fail':
-                # Get the candidate survival rules
-                samples_b_bnd = samples_b_bnd[n_samp_b:]
-                samples_b_rule = mask_from_first_one(samples_b_bnd, mode='after', keep_last_row=True)
-
-                is_not_subset = torch.ones((samples_b_rule.shape[0],), dtype=torch.bool, device=device)
-                for s_idx, samp in enumerate(samples_b_rule):
-                    flag1, flag2 = is_subset(samp[:-1, :], rules_mat_other[:, :-1, :])
-                    if flag1:
-                        is_not_subset[s_idx] = False
-                samples_b = samples_b[is_not_subset]
-                real_prs = real_prs[is_not_subset]
-                samples_b_bnd = samples_b_bnd[is_not_subset]
-                samples_b_rule = samples_b_rule[is_not_subset]
-
-                rule_prs = get_branch_probs(samples_b_rule, probs)
-                if any(rule_prs > 0):
-                    s_idx = torch.argmax(rule_prs)  
-                    sample_bnd = samples_b_bnd[s_idx]
-
-                # Get survival-likely branches with minimal survival conditions (i.e. lower bound)
-                return sample_bnd, n_samp
-            
-            else: # rules_st == 'surv'
-                # Get the candidate failure rules
-                samples_b_bnd = samples_b_bnd[:n_samp_b]
-                samples_b_rule = mask_from_first_one(samples_b_bnd, mode='before', keep_last_row=True)
-
-                is_not_subset = torch.ones((samples_b_rule.shape[0],), dtype=torch.bool, device=device)
-                for s_idx, samp in enumerate(samples_b_rule):
-                    flag1, flag2 = is_subset(samp[:-1, :], rules_mat_other[:, :-1, :])
-                    if flag1:
-                        is_not_subset[s_idx] = False
-                samples_b = samples_b[is_not_subset]
-                real_prs = real_prs[is_not_subset]
-                samples_b_bnd = samples_b_bnd[is_not_subset]
-                samples_b_rule = samples_b_rule[is_not_subset]
-
-                rule_prs = get_branch_probs(samples_b_rule, probs)
-                if any(rule_prs > 0):
-                    s_idx = torch.argmax(rule_prs)  
-                    sample_bnd = samples_b_bnd[s_idx]
-
-                # Get survival-likely branches with minimal survival conditions (i.e. lower bound)
-                return sample_bnd, n_samp
-
-    print("Max iterations reached without finding a valid sample.")
-    return None, n_samp
-
-def sample_complementary_events_max_prob_same_rule(probs, rules_mat, rules_mat_other, rules_st = 'fail', B=1_024, max_iters=1_000, stochastic_search = True, gamma = 1.2):
-    """
-    Sample complementary events to the given rules_mat (that represents either fail or surv), ensuring they are not subsets of rules_mat_other.
-    This version selects the complementary event with the maximum probability of finding the rule with the same state.
-    """
-    device = probs.device
-    n_comp, n_state = probs.shape
-    n_var = n_comp + 1  # including system event
-
-    n_samp = 0
-    for iter in range(max_iters):
-        n_samp += B
-
-        # Start with all-ones batch
-        samples_b = torch.ones((B, n_var, n_state), dtype=torch.int32, device=device)
-
-        # Strategy 1: The same permutation applies within a batch
-        # rules_ord = np.random.permutation(len(rules_mat))
-        # Strategy 2: Sort the rules by their probs
-        rules_probs = get_branch_probs(rules_mat, probs)
-        rules_ord = torch.argsort(rules_probs, descending=True)
-
-        # Sampling starts.
-        for r_idx in rules_ord:
-
-            r_mat = rules_mat[r_idx]
-            r_mat_c = get_complementary_events_nondisjoint(r_mat)
-
-            # Decide whether to sample: skip samples that already contradicts r_mat (to obtain minimal rules)
-            is_sampled = torch.ones((B,), dtype=torch.bool, device=device)
-            for rc1 in r_mat_c:
-                flag1, flag2 = is_subset(rc1, samples_b)
-
-                is_sampled[flag2] = False
-
-            # Select a r_mat_c
-            r_mat_c_probs = get_branch_probs(r_mat_c, probs)
-            r_mat_c_probs = r_mat_c_probs / r_mat_c_probs.sum()
-            idx = torch.multinomial(r_mat_c_probs, num_samples=B, replacement=True)
-
-            # Update samples if is_sampled == True
-            samples_b[is_sampled] = samples_b[is_sampled] * r_mat_c[idx[is_sampled]].squeeze(0)
-
-        # Check if there are events with positive prob
-        real_prs = get_branch_probs(samples_b, probs)
-        samples_b = samples_b[real_prs > 0]
-        real_prs = real_prs[real_prs > 0]
-
-        if samples_b.shape[0] > 0:
-
-            if rules_st == 'fail':
-                #From failures' complementary events, one only gets [..0..1..] or [..1..]
-                is_not_subset = torch.ones((samples_b.shape[0],), dtype=torch.bool, device=device)
-                for s_idx, samp in enumerate(samples_b):
-                    flag1, flag2 = is_subset(samp[:-1, :], rules_mat_other[:, :-1, :])
-                    if flag1:
-                        is_not_subset[s_idx] = False
-                samples_b = samples_b[is_not_subset]
-                real_prs = real_prs[is_not_subset]
-                if any(real_prs > 0):
-                    if stochastic_search:
-                        min_val = real_prs[real_prs > 0].min() if (real_prs > 0).any() else torch.tensor(1.0)
-                        eps = min_val / 1000.0
-                        weights = 1.0 / (real_prs + eps) ** gamma # 0 < γ < 1 → flattens the distribution, small values of real_prs still get higher chance, but less extreme; if γ > 1 → sharpens the distribution, very small values of real_prs get much higher chance
-                        weights = weights / weights.sum()
-                        s_idx = torch.multinomial(weights, num_samples=1).item()
-                    else:
-                        s_idx = torch.argmin(real_prs)  # maximise the probability of 0's that would likely form the new rule
-                        
-                    sample_b = samples_b[s_idx]
-
-                    # Get failure-likely branches with minimal failure conditions (i.e. lower bound)
-                    sample_bnd = get_boundary_branches(sample_b.unsqueeze(0))
-                    sample_bnd = sample_bnd[1] # get the lower bound
-
-                    return sample_bnd, n_samp
-            
-            else: # rules_st == 'surv'
-                # From survivals' complementary events, one only gets [..1..0..] or [..1..]
-                is_not_subset = torch.ones((samples_b.shape[0],), dtype=torch.bool, device=device)
-                for s_idx, samp in enumerate(samples_b):
-                    flag1, flag2 = is_subset(samp[:-1, :], rules_mat_other[:, :-1, :]) # check if the sampled event is a subset of the existing failure rules
-                    if flag1:
-                        is_not_subset[s_idx] = False
-                samples_b = samples_b[is_not_subset]
-                real_prs = real_prs[is_not_subset]
-
-                if any(real_prs > 0):
-                    if stochastic_search:
-                        min_val = real_prs[real_prs > 0].min() if (real_prs > 0).any() else torch.tensor(1.0)
-                        eps = min_val / 1000.0
-                        weights = 1.0 / (real_prs + eps) ** gamma # 0 < γ < 1 → flattens the distribution, small values of real_prs still get higher chance, but less extreme; if γ > 1 → sharpens the distribution, very small values of real_prs get much higher chance
-                        weights = weights / weights.sum()
-                        s_idx = torch.multinomial(weights, num_samples=1).item()
-                    else:
-                        s_idx = torch.argmin(real_prs)  # maximise the probability of 0's that would likely form the new rule
-
-                    sample_b = samples_b[s_idx]
-
-                    # Get survival-likely branches with minimal survival conditions (i.e. upper bound)
-                    sample_bnd = get_boundary_branches(sample_b.unsqueeze(0))
-                    sample_bnd = sample_bnd[0] # get the upper bound
-                    return sample_bnd, n_samp
-
-    print("Max iterations reached without finding a valid sample.")
-    return None, n_samp
 
 def classify_samples(samples, survival_rules, failure_rules):
     """
@@ -1281,7 +1068,7 @@ def classify_samples(samples, survival_rules, failure_rules):
     failure_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
 
     # Convert list to tensor stack
-    all_rules = [(r[:-1, :], 'survival') for r in survival_rules] + [(r[:-1, :], 'failure') for r in failure_rules] # exclude the last row which represents the system state
+    all_rules = [(r, 'survival') for r in survival_rules] + [(r, 'failure') for r in failure_rules] # exclude the last row which represents the system state
 
     for rule_tensor, label in all_rules:
         # Only apply to unclassified samples
@@ -1350,8 +1137,7 @@ def sample_categorical(probs, n_sample):
 
 def mask_from_first_one(
     x: torch.Tensor,
-    mode: str = "after",
-    keep_last_row: bool = True,
+    mode: str = "after"
 ) -> torch.Tensor:
     """
     Create masks relative to the first 1 in each row.
@@ -1361,8 +1147,6 @@ def mask_from_first_one(
         mode:
             - "after"  → ones from first 1 (inclusive) to end
             - "before" → ones from start up to first 1 (inclusive)
-        keep_last_row: if True, copy the last row from x into the mask (per batch item)
-
     Returns:
         Tensor of same shape as x, dtype=int32, device preserved.
     """
@@ -1393,10 +1177,6 @@ def mask_from_first_one(
         mask = cols <= first_idx.unsqueeze(-1)  # (B, N, M)
     else:
         raise ValueError("mode must be 'after' or 'before'")
-
-    if keep_last_row:
-        # Preserve the last row exactly as in x
-        mask[:, -1, :] = x3[:, -1, :].bool()
 
     mask = mask.to(torch.int32)
 
@@ -1503,7 +1283,6 @@ def run_rule_extraction(
     metrics_log: List[Dict[str, Any]] = []
 
     n_vars = len(row_names)
-    n_comps = n_vars - 1 # exclude system event
     if rules_mat_surv is None:
         rules_mat_surv = torch.empty((0,n_vars,n_state), dtype=torch.int32, device=device)
     if rules_mat_fail is None:
@@ -1735,8 +1514,7 @@ def classify_samples_with_indices(
     def _prep_rules(rules, label):
         out = []
         for r in rules:
-            r_ok = r[:-1, :]
-            out.append((r_ok.to(device=device, dtype=torch.bool), label))
+            out.append((r.to(device=device, dtype=torch.bool), label))
         return out
 
     all_rules = _prep_rules(survival_rules, 'survival') + _prep_rules(failure_rules, 'failure')
@@ -1789,143 +1567,6 @@ def classify_samples_with_indices(
 
     return result
 
-def run_survival_candidate_round(
-    *,
-    probs: torch.Tensor,
-    rules_mat_surv: torch.Tensor,
-    rules_mat_fail: torch.Tensor,
-    rules_surv: List[Dict[str, Any]],
-    rules_fail: List[Dict[str, Any]],
-    row_names: List[str],
-    n_state: int,
-    sys_val_list: List[Any],
-    sfun,
-    rule_search_batch_size: int,
-    rule_search_max_iters: int,
-    stochastic_search: bool,
-    gamma: float,
-    min_rule_search: bool,
-    rule_update_verbose: bool,
-):
-    """Former Part 3 (survival candidate). Returns (found_new, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)."""
-    surv_cand, n_samp2 = sample_complementary_events_max_prob_same_rule(
-        probs,
-        rules_mat_surv,
-        rules_mat_fail,
-        rules_st='surv',
-        B=rule_search_batch_size,
-        max_iters=rule_search_max_iters,
-        stochastic_search=stochastic_search,
-        gamma=gamma,
-    )
-    if surv_cand is None:
-        return (False, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)
-
-    comps_st_test = from_Bbound_to_comps_st(surv_cand, row_names)
-    fval, sys_st, min_comps_st = sfun(comps_st_test)
-
-    if min_comps_st is None:
-        if sys_st == 's':
-            if min_rule_search:
-                min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1)
-                fval = info.get('final_sys_state', fval)
-            else:
-                min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
-        else:
-            if min_rule_search:
-                min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0)
-                fval = info.get('final_sys_state', fval)
-            else:
-                min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
-
-    if sys_st == 's':
-        print("Survival sample found from survival rules 👍")
-        rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
-    else:
-        print("Failure sample found from survival rules 👍👍")
-        rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
-
-    print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_samp2}.")
-    print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
-
-    if isinstance(fval, float):
-        fval = int(round(fval * 1000)) / 1000.0
-    if fval not in sys_val_list:
-        sys_val_list.append(fval)
-        sys_val_list.sort(key=mixed_sort_key)
-        print(f"Updated sys_vals: {sys_val_list}")
-
-    return (True, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)
-
-
-def run_failure_candidate_round(
-    *,
-    probs: torch.Tensor,
-    rules_mat_surv: torch.Tensor,
-    rules_mat_fail: torch.Tensor,
-    rules_surv: List[Dict[str, Any]],
-    rules_fail: List[Dict[str, Any]],
-    row_names: List[str],
-    n_state: int,
-    sys_val_list: List[Any],
-    sfun,
-    rule_search_batch_size: int,
-    rule_search_max_iters: int,
-    stochastic_search: bool,
-    gamma: float,
-    min_rule_search: bool,
-    rule_update_verbose: bool,
-):
-    """Former Part 4 (failure candidate). Returns (found_new, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)."""
-    fail_cand, n_samp3 = sample_complementary_events_max_prob_same_rule(
-        probs,
-        rules_mat_fail,
-        rules_mat_surv,
-        rules_st='fail',
-        B=rule_search_batch_size,
-        max_iters=rule_search_max_iters,
-        stochastic_search=stochastic_search,
-        gamma=gamma,
-    )
-    if fail_cand is None:
-        return (False, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)
-
-    comps_st_test = from_Bbound_to_comps_st(fail_cand, row_names)
-    fval, sys_st, min_comps_st = sfun(comps_st_test)
-
-    if min_comps_st is None:
-        if sys_st == 's':
-            if min_rule_search:
-                min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1)
-                fval = info.get('final_sys_state', fval)
-            else:
-                min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
-        else:
-            if min_rule_search:
-                min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0)
-                fval = info.get('final_sys_state', fval)
-            else:
-                min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
-
-    if sys_st == 'f':
-        print("Failure sample found from failure rules 👍")
-        rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
-    else:
-        print("Survival sample found from failure rules 👍👍")
-        rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
-
-    print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_samp3}.")
-    print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
-
-    if isinstance(fval, float):
-        fval = int(round(fval * 1000)) / 1000.0
-    if fval not in sys_val_list:
-        sys_val_list.append(fval)
-        sys_val_list.sort(key=mixed_sort_key)
-        print(f"Unique system values: {sys_val_list}")
-
-    return (True, rules_surv, rules_fail, rules_mat_surv, rules_mat_fail, sys_val_list)
-
 def get_comp_cond_sys_prob(
     rules_mat_surv: Tensor,
     rules_mat_fail: Tensor,
@@ -1933,6 +1574,7 @@ def get_comp_cond_sys_prob(
     comps_st_cond: Dict[str, int],
     row_names: Sequence[str],
     s_fun,                          # Callable[[Dict[str,int]], tuple]
+    sys_surv_st: int = 1,        # system state value indicating survival
     n_sample: int = 1_000_000,
     n_batch:  int = 1_000_000,
     *,
@@ -1954,12 +1596,11 @@ def get_comp_cond_sys_prob(
     if torch.is_tensor(probs):
         probs_cond = probs.clone()
         n_comps, n_states = probs_cond.shape
-        n_vars = n_comps + 1 # system event
     else:
         raise TypeError("Expected 'probs' to be a torch.Tensor of shape (n_var, n_state).")
 
-    if len(row_names) != n_vars:
-        raise ValueError(f"row_names length ({len(row_names)}) must match probs rows ({n_vars}).")
+    if len(row_names) != n_comps:
+        raise ValueError(f"row_names length ({len(row_names)}) must match probs rows ({n_comps}).")
 
     for x, s in comps_st_cond.items():
         try:
@@ -1992,27 +1633,20 @@ def get_comp_cond_sys_prob(
         # Resolve unknowns with s_fun
         idx_unknown = res["idx_unknown"]
         if idx_unknown.numel() > 0:
-            # precompute the system row index if excluding
-            sys_idx = None
-            if sys_row is not None:
-                sys_idx = sys_row if sys_row >= 0 else (n_vars + sys_row)
 
             for j in idx_unknown.tolist():
                 sample_j = samples[j]  # (n_var, n_state)
                 # convert one-hot row -> state index per var
                 states = torch.argmax(sample_j, dim=1).tolist()
 
-                # build comps dict for s_fun, excluding system row if requested
-                if sys_idx is not None:
-                    comps = {row_names[k]: int(states[k]) for k in range(n_vars) if k != sys_idx}
-                else:
-                    comps = {row_names[k]: int(states[k]) for k in range(n_vars)}
+                # build comps dict for s_fun
+                comps = {row_names[k]: int(states[k]) for k in range(n_comps)}
 
                 _, sys_st, _ = s_fun(comps)
 
-                if sys_st in ("s", "survival", 1, True):
+                if sys_st >= sys_surv_st:
                     counts["survival"] += 1
-                elif sys_st in ("f", "failure", 0, False):
+                else:
                     counts["failure"] += 1
 
         remaining -= b
@@ -2028,6 +1662,7 @@ def run_rule_extraction_by_mcs(
     probs: torch.Tensor,
     row_names: List[str],
     n_state: int,
+    sys_surv_st: int,
     rules_surv: Optional[List[Dict[str, Any]]] = None,
     rules_fail: Optional[List[Dict[str, Any]]] = None,
     rules_mat_surv: Optional[torch.Tensor] = None,
@@ -2039,20 +1674,27 @@ def run_rule_extraction_by_mcs(
     save_every: int = 10,
     n_sample: int = 10_000_000,
     sample_batch_size: int = 100_000,
-    rule_search_batch_size: int = 1_024,      # kept for parity; unused in this MCS version
-    rule_search_max_iters: int = 10,          # kept for parity; unused in this MCS version
     min_rule_search: bool = True,
     rule_update_verbose: bool = True,
     # Output control
-    output_dir: str = "tsum_temp",
-    surv_json_name: str = "rules_surv.json",
-    fail_json_name: str = "rules_fail.json",
-    surv_pt_name: str = "rules_surv.pt",
-    fail_pt_name: str = "rules_fail.pt",
+    output_dir: str = "tsum_res",
+    surv_json_name: str = None,
+    fail_json_name: str = None,
+    surv_pt_name: str = None,
+    fail_pt_name: str = None,
     metrics_path: str = "metrics.jsonl",
 ) -> Dict[str, Any]:
 
     os.makedirs(output_dir, exist_ok=True)
+
+    if surv_json_name is None:
+        surv_json_name = f"rules_geq_{sys_surv_st}.json"
+    if fail_json_name is None:
+        fail_json_name = f"rules_leq_{sys_surv_st-1}.json"
+    if surv_pt_name is None:
+        surv_pt_name = f"rules_geq_{sys_surv_st}.pt"
+    if fail_pt_name is None:
+        fail_pt_name = f"rules_leq_{sys_surv_st-1}.pt"
 
     # ---- helpers ----
     def _avg_rule_len(rule_store: Any) -> float:
@@ -2188,24 +1830,24 @@ def run_rule_extraction_by_mcs(
         sample0 = samples[rand_idx]  # (n_var, n_state)
 
         states = torch.argmax(sample0, dim=1).tolist()
-        comps_st_test = {row_names[k]: int(states[k]) for k in range(n_vars-1)}  # exclude system var
+        comps_st_test = {row_names[k]: int(states[k]) for k in range(n_vars)}  # exclude system var
 
         fval, sys_st, min_comps_st = sfun(comps_st_test)
         if min_comps_st is None:
-            if sys_st == 's':
+            if sys_st >= sys_surv_st:
                 if min_rule_search:
-                    min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1, fval=fval)
+                    min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=sys_surv_st, fval=fval)
                     fval = info.get('final_sys_state', fval)
                 else:
-                    min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
+                    min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=sys_surv_st)
             else:
                 if min_rule_search:
-                    min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0, fval=fval)
+                    min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=sys_surv_st-1, fval=fval)
                     fval = info.get('final_sys_state', fval)
                 else:
-                    min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
+                    min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=sys_surv_st-1)
 
-        if sys_st == 's':
+        if sys_st >= sys_surv_st:
             print("Survival sample found from sampling.")
             rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
         else:
