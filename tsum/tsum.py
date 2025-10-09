@@ -1068,7 +1068,7 @@ def classify_samples(samples, survival_rules, failure_rules):
     failure_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
 
     # Convert list to tensor stack
-    all_rules = [(r[:-1, :], 'survival') for r in survival_rules] + [(r[:-1, :], 'failure') for r in failure_rules] # exclude the last row which represents the system state
+    all_rules = [(r, 'survival') for r in survival_rules] + [(r, 'failure') for r in failure_rules] # exclude the last row which represents the system state
 
     for rule_tensor, label in all_rules:
         # Only apply to unclassified samples
@@ -1283,7 +1283,6 @@ def run_rule_extraction(
     metrics_log: List[Dict[str, Any]] = []
 
     n_vars = len(row_names)
-    n_comps = n_vars - 1 # exclude system event
     if rules_mat_surv is None:
         rules_mat_surv = torch.empty((0,n_vars,n_state), dtype=torch.int32, device=device)
     if rules_mat_fail is None:
@@ -1515,8 +1514,7 @@ def classify_samples_with_indices(
     def _prep_rules(rules, label):
         out = []
         for r in rules:
-            r_ok = r[:-1, :]
-            out.append((r_ok.to(device=device, dtype=torch.bool), label))
+            out.append((r.to(device=device, dtype=torch.bool), label))
         return out
 
     all_rules = _prep_rules(survival_rules, 'survival') + _prep_rules(failure_rules, 'failure')
@@ -1576,6 +1574,7 @@ def get_comp_cond_sys_prob(
     comps_st_cond: Dict[str, int],
     row_names: Sequence[str],
     s_fun,                          # Callable[[Dict[str,int]], tuple]
+    sys_surv_st: int = 1,        # system state value indicating survival
     n_sample: int = 1_000_000,
     n_batch:  int = 1_000_000,
     *,
@@ -1597,12 +1596,11 @@ def get_comp_cond_sys_prob(
     if torch.is_tensor(probs):
         probs_cond = probs.clone()
         n_comps, n_states = probs_cond.shape
-        n_vars = n_comps + 1 # system event
     else:
         raise TypeError("Expected 'probs' to be a torch.Tensor of shape (n_var, n_state).")
 
-    if len(row_names) != n_vars:
-        raise ValueError(f"row_names length ({len(row_names)}) must match probs rows ({n_vars}).")
+    if len(row_names) != n_comps:
+        raise ValueError(f"row_names length ({len(row_names)}) must match probs rows ({n_comps}).")
 
     for x, s in comps_st_cond.items():
         try:
@@ -1635,27 +1633,20 @@ def get_comp_cond_sys_prob(
         # Resolve unknowns with s_fun
         idx_unknown = res["idx_unknown"]
         if idx_unknown.numel() > 0:
-            # precompute the system row index if excluding
-            sys_idx = None
-            if sys_row is not None:
-                sys_idx = sys_row if sys_row >= 0 else (n_vars + sys_row)
 
             for j in idx_unknown.tolist():
                 sample_j = samples[j]  # (n_var, n_state)
                 # convert one-hot row -> state index per var
                 states = torch.argmax(sample_j, dim=1).tolist()
 
-                # build comps dict for s_fun, excluding system row if requested
-                if sys_idx is not None:
-                    comps = {row_names[k]: int(states[k]) for k in range(n_vars) if k != sys_idx}
-                else:
-                    comps = {row_names[k]: int(states[k]) for k in range(n_vars)}
+                # build comps dict for s_fun
+                comps = {row_names[k]: int(states[k]) for k in range(n_comps)}
 
                 _, sys_st, _ = s_fun(comps)
 
-                if sys_st in ("s", "survival", 1, True):
+                if sys_st >= sys_surv_st:
                     counts["survival"] += 1
-                elif sys_st in ("f", "failure", 0, False):
+                else:
                     counts["failure"] += 1
 
         remaining -= b
@@ -1671,6 +1662,7 @@ def run_rule_extraction_by_mcs(
     probs: torch.Tensor,
     row_names: List[str],
     n_state: int,
+    sys_surv_st: int,
     rules_surv: Optional[List[Dict[str, Any]]] = None,
     rules_fail: Optional[List[Dict[str, Any]]] = None,
     rules_mat_surv: Optional[torch.Tensor] = None,
@@ -1682,20 +1674,27 @@ def run_rule_extraction_by_mcs(
     save_every: int = 10,
     n_sample: int = 10_000_000,
     sample_batch_size: int = 100_000,
-    rule_search_batch_size: int = 1_024,      # kept for parity; unused in this MCS version
-    rule_search_max_iters: int = 10,          # kept for parity; unused in this MCS version
     min_rule_search: bool = True,
     rule_update_verbose: bool = True,
     # Output control
-    output_dir: str = "tsum_temp",
-    surv_json_name: str = "rules_surv.json",
-    fail_json_name: str = "rules_fail.json",
-    surv_pt_name: str = "rules_surv.pt",
-    fail_pt_name: str = "rules_fail.pt",
+    output_dir: str = "tsum_res",
+    surv_json_name: str = None,
+    fail_json_name: str = None,
+    surv_pt_name: str = None,
+    fail_pt_name: str = None,
     metrics_path: str = "metrics.jsonl",
 ) -> Dict[str, Any]:
 
     os.makedirs(output_dir, exist_ok=True)
+
+    if surv_json_name is None:
+        surv_json_name = f"rules_geq_{sys_surv_st}.json"
+    if fail_json_name is None:
+        fail_json_name = f"rules_leq_{sys_surv_st-1}.json"
+    if surv_pt_name is None:
+        surv_pt_name = f"rules_geq_{sys_surv_st}.pt"
+    if fail_pt_name is None:
+        fail_pt_name = f"rules_leq_{sys_surv_st-1}.pt"
 
     # ---- helpers ----
     def _avg_rule_len(rule_store: Any) -> float:
@@ -1831,24 +1830,24 @@ def run_rule_extraction_by_mcs(
         sample0 = samples[rand_idx]  # (n_var, n_state)
 
         states = torch.argmax(sample0, dim=1).tolist()
-        comps_st_test = {row_names[k]: int(states[k]) for k in range(n_vars-1)}  # exclude system var
+        comps_st_test = {row_names[k]: int(states[k]) for k in range(n_vars)}  # exclude system var
 
         fval, sys_st, min_comps_st = sfun(comps_st_test)
         if min_comps_st is None:
-            if sys_st == 's':
+            if sys_st >= sys_surv_st:
                 if min_rule_search:
-                    min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=1, fval=fval)
+                    min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=sys_surv_st, fval=fval)
                     fval = info.get('final_sys_state', fval)
                 else:
-                    min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=1)
+                    min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=sys_surv_st)
             else:
                 if min_rule_search:
-                    min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=0, fval=fval)
+                    min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=sys_surv_st-1, fval=fval)
                     fval = info.get('final_sys_state', fval)
                 else:
-                    min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=0)
+                    min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=sys_surv_st-1)
 
-        if sys_st == 's':
+        if sys_st >= sys_surv_st:
             print("Survival sample found from sampling.")
             rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
         else:
