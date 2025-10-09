@@ -2,7 +2,7 @@ from pathlib import Path
 HOME = Path(__file__).absolute().parent
 
 from tsum import tsum
-from tsum.utils import sys_fun_sum
+#from tsum.utils import sys_fun_sum
 from tsum import utils
 import pytest
 import torch
