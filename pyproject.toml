@@ -1,6 +1,6 @@
 [project]
 name = "tsum"
-version = "0.1.0"
+version = "0.1.1"
 description = "Tensor-based System Uncertainty Methods (TSUM) for system risk assessment"
 authors = [
     { name = "Ji-Eun Byun", email = "ji-eun.byun@glasgow.ac.uk" }
