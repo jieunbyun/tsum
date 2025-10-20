@@ -6,7 +6,7 @@ import math
 from decimal import Decimal
 import numpy as np
 import os, json, time
-from typing import Callable, Dict, Any, List, Optional, Tuple, Sequence, Iterable
+from typing import Callable, Dict, Any, List, Optional, Tuple, Sequence, Iterable, Union
 from torch import Tensor
 
 import random
@@ -1576,21 +1576,15 @@ def get_comp_cond_sys_prob(
     s_fun,                          # Callable[[Dict[str,int]], tuple]
     sys_surv_st: int = 1,        # system state value indicating survival
     n_sample: int = 1_000_000,
-    n_batch:  int = 1_000_000,
-    *,
-    sys_row: Optional[int] = -1,    # index of the system row to exclude when building comps; set to None to include all
+    n_batch:  int = 1_000_000
 ) -> Dict[str, float]:
     """
     P(system state | given component states).
 
     - 'probs' is (n_var, n_state) categorical; we condition rows listed in comps_st_cond to one-hot.
     - We classify samples using rules; for unknowns we call s_fun(comps_dict) to resolve.
-    - Returns probabilities over {'survival','failure','unknown'} that sum ~ 1.0.
+    - Returns probabilities over {'survival','failure'} that sum ~ 1.0.
 
-    Notes
-    -----
-    - If sys_row is not None, that row is excluded when building the comps dict for s_fun.
-      Default -1 means the last row is the system variable.
     """
     # --- clone probs and apply conditioning ---
     if torch.is_tensor(probs):
@@ -1656,6 +1650,129 @@ def get_comp_cond_sys_prob(
     cond_probs = {k: counts[k] / total for k in counts}
     return cond_probs
 
+def get_comp_cond_sys_prob_multi(
+    rules_dict_surv: Dict[int, Tensor],
+    rules_dict_fail: Dict[int, Tensor],
+    probs: Tensor,
+    comps_st_cond: Dict[str, int],
+    row_names: Sequence[str],
+    s_fun,                          # Callable[[Dict[str,int]], tuple]
+    n_sample: int = 1_000_000,
+    n_batch:  int = 1_000_000
+) -> Dict[str, float]:
+    """
+    Estimate P(system state = s | given component states) for multi-state systems by Monte Carlo.
+
+    Args:
+        rules_dict_surv: dict of system survival rule tensors {state: Tensor(n_var, n_state)}.
+        rules_dict_fail: dict of system failure rule tensors {state: Tensor(n_var, n_state)}.
+        probs: (n_var, n_state) categorical probability tensor.
+        comps_st_cond: dict of known component states {name: state_index}.
+        row_names: list of variable (component) names matching probs rows.
+        s_fun: function(comps_dict) -> tuple(_, sys_state, _).
+        n_sample, n_batch: number of samples total and per batch.
+
+    Returns:
+        Dictionary {state: probability}, summing to 1.0.
+    """
+    # --- clone probs and apply conditioning ---
+    if torch.is_tensor(probs):
+        probs_cond = probs.clone()
+        n_comps, n_states = probs_cond.shape
+    else:
+        raise TypeError("Expected 'probs' to be a torch.Tensor of shape (n_var, n_state).")
+
+    if len(row_names) != n_comps:
+        raise ValueError(f"row_names length ({len(row_names)}) must match probs rows ({n_comps}).")
+
+    # Applying conditioning
+    for x, s in comps_st_cond.items():
+        try:
+            row_idx = row_names.index(x)
+        except ValueError:
+            raise ValueError(f"Component {x} not found in row_names.")
+        if not (0 <= int(s) < n_states):
+            raise ValueError(f"State {s} for component {x} is out of bounds [0,{n_states-1}].")
+        probs_cond[row_idx].zero_()
+        probs_cond[row_idx, int(s)] = 1.0
+
+    # Validate rule keys
+    keys_surv = set(rules_dict_surv.keys())
+    keys_fail = set(rules_dict_fail.keys())
+    if keys_surv != keys_fail:
+        raise ValueError("Survival and failure rule dictionaries must have identical keys.")
+    sys_st_list = sorted(keys_surv)
+    max_st = max(sys_st_list)
+    if sys_st_list != list(range(1, max_st + 1)):
+        raise ValueError("Rule dictionary keys must be consecutive integers starting at 1.")
+
+    # --- sampling loop (exactly n_sample draws) ---
+    batch_size = max(1, min(int(n_batch), int(n_sample)))
+    remaining = int(n_sample)
+    counts = {s: 0 for s in [0] + sys_st_list}
+    device = probs.device
+
+    while remaining > 0:
+        b = min(batch_size, remaining)
+        samples = sample_categorical(probs_cond, b)  # (b, n_var, n_state) one-hot
+        active = torch.ones(b, dtype=torch.bool, device=device)
+
+        surv_prev = torch.ones(b, dtype=torch.bool, device=device) # survival indices in the previous rounds
+        for s in range(1, max_st + 1):
+
+            _res = classify_samples_with_indices(
+                samples[active], rules_dict_surv[s], rules_dict_fail[s], return_masks=True
+            )
+
+            # back to original indices
+            active_idx = torch.where(active)[0]  # positions in the original batch
+            # subset masks from the classifier (length == active.sum())
+            mask_surv_sub = _res["mask_survival"]
+            mask_fail_sub = _res["mask_failure"]
+            mask_unk_sub  = _res["mask_unknown"]
+
+            # create full-size masks (length == b) and place subset masks at active positions
+            mask_surv_full = torch.zeros(b, dtype=torch.bool, device=device)
+            mask_fail_full = torch.zeros(b, dtype=torch.bool, device=device)
+            mask_unk_full  = torch.zeros(b, dtype=torch.bool, device=device)
+
+            mask_surv_full[active_idx] = mask_surv_sub
+            mask_fail_full[active_idx] = mask_fail_sub
+            mask_unk_full[active_idx]  = mask_unk_sub
+
+            # Samples for sys = s-1
+            _samp_s_1 = mask_fail_full & surv_prev
+            counts[s-1] += int(_samp_s_1.sum().item())
+
+            # update trackers
+            active   = active & ~_samp_s_1  # remove finalized ones
+            surv_prev = mask_surv_full # survivors roll to next level
+        # Last state
+        counts[s] += int(surv_prev.sum().item())
+        active = active & ~surv_prev
+        active_idx = torch.where(active)[0]  # positions in the original batch
+
+        # Resolve unknowns with s_fun
+        if active_idx.numel() > 0:
+
+            for j in active_idx.tolist():
+                sample_j = samples[j]  # (n_var, n_state)
+                # convert one-hot row -> state index per var
+                states = torch.argmax(sample_j, dim=1).tolist()
+
+                # build comps dict for s_fun
+                comps = {row_names[k]: int(states[k]) for k in range(n_comps)}
+
+                _, sys_st, _ = s_fun(comps)
+                counts[sys_st] += 1
+
+        remaining -= b
+
+    # --- normalize to probabilities (denominator = requested n_sample) ---
+    total = float(n_sample)
+    cond_probs = {k: counts[k] / total for k in counts}
+    return cond_probs
+
 def run_rule_extraction_by_mcs(
     *,
     sfun,
@@ -1668,7 +1785,8 @@ def run_rule_extraction_by_mcs(
     rules_mat_surv: Optional[torch.Tensor] = None,
     rules_mat_fail: Optional[torch.Tensor] = None,
     # Termination / threshold settings
-    unk_prob_thres: float = 1e-3,
+    unk_prob_thres: float = 1e-2,
+    unk_prob_opt: str = "rel", # "abs" or "rel"
     # Frequencies / sampling settings
     prob_update_every: int = 500,
     save_every: int = 10,
@@ -1737,12 +1855,12 @@ def run_rule_extraction_by_mcs(
     rules_fail_pt_path = os.path.join(output_dir, fail_pt_name)
 
     is_new_cand = True
-    last_probs = {"survival": None, "failure": None, "unknown": None}
+    last_probs = {"survival": 0.0, "failure": 0.0, "unknown": 1.0}
 
     total_loops = max(n_sample // sample_batch_size, 1)
 
     # ---- main loop ----
-    while is_new_cand and (unk_prob > unk_prob_thres):
+    while is_new_cand and (unk_prob > unk_prob_thres if unk_prob_opt == "abs" else unk_prob / (min([last_probs["failure"]+1e-12, last_probs["survival"]+1e-12])) > unk_prob_thres):
         n_round += 1
         t0 = time.perf_counter()
 
@@ -1955,3 +2073,4 @@ def run_rule_extraction_by_mcs(
         "rules_fail_pt_path": rules_fail_pt_path,
         "metrics_log": metrics_log,
     }
+
