@@ -1126,3 +1126,113 @@ def test_minimise_fail_states_random2(surv_fail_rules_ex_4comps):
 
     new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, sys_fail_st=0, max_state=2)
     assert new_rule in fail_rules, f"Got {new_rule}"
+
+# ---------- Fixture: 5 components, binary states ----------
+@pytest.fixture
+def def_five_comp():
+    """
+    Five binary components; rules are 0/1 indicator matrices of shape (n_var, n_state).
+    We'll interpret "subset" as (sample_onehot & rule) == sample_onehot.
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # failure / survival rule tensors for the (single) threshold level (state >= 1)
+    # Shape: (n_var, n_state) = (5, 2)
+    # You can tweak these if you want different logical patterns.
+    failure_rules = torch.Tensor(
+        [[[1, 0], [1, 0], [1, 1], [1, 1], [1, 1]],
+        [[1, 1], [1, 1], [1, 1], [1, 0], [1, 0]],
+        [[1, 0], [1, 1], [1, 0], [1, 1], [1, 0]],
+        [[1, 1], [1, 0], [1, 1], [1, 1], [1, 1]]]
+    )
+
+    survival_rules = torch.Tensor(
+        [[[0, 1], [1, 1], [1, 1], [0, 1], [1, 1]],
+        [[1, 1], [0, 1], [1, 1], [1, 1], [0, 1]],
+        [[0, 1], [1, 1], [0, 1], [1, 1], [0, 1]],
+        [[1, 1], [0, 1], [0, 1], [0, 1], [1, 1]]])
+
+    # per-component categorical probabilities P(state=0), P(state=1)
+    probs = torch.Tensor([
+        [0.1, 0.9],
+        [0.1, 0.9],
+        [0.1, 0.9],
+        [0.1, 0.9],
+        [0.1, 0.9]])
+
+    row_names = [f"x{i}" for i in range(1, 6)]
+
+    # Fallback resolver: compute system state (0/1) using the same subset logic against survival_rules.
+    # If a sample "survives" that rule, sys_state=1, else 0.
+    def s_fun(comps_dict):
+        # Build one-hot sample from integer states in comps_dict
+        n_var, n_state = probs.shape
+        sample = torch.zeros(n_var, n_state, dtype=torch.int32, device=device)
+        for i, name in enumerate(row_names):
+            s = int(comps_dict[name])
+            sample[i, s] = 1
+
+        # subset check: sample ⊆ survival_rules <=> (sample & rule) == sample
+        rule = survival_rules.to(dtype=torch.bool)
+        smp = sample.to(dtype=torch.bool)
+        is_survive = torch.all((smp & rule) == smp)
+        sys_state = 1 if bool(is_survive.item()) else 0
+        return None, sys_state, None
+
+    return failure_rules, survival_rules, probs, row_names, s_fun
+
+
+# ---------- Multi-state API test (returns state probabilities {0,1}) ----------
+def test_get_comp_cond_sys_prob_multi__two_state(def_five_comp):
+    failure_rules, survival_rules, probs, row_names, s_fun = def_five_comp
+
+    # The multi-state function expects consecutive keys from 0..max_st in BOTH dicts.
+    device = probs.device
+
+    rules_dict_surv = {
+        1: survival_rules,  
+    }
+    rules_dict_fail = {
+        1: failure_rules,  
+    }
+
+    # Use a reasonably large n_sample but not too slow for CI;
+    # seed for determinism and a small relative tolerance
+    torch.manual_seed(0)
+    cond_probs = tsum.get_comp_cond_sys_prob_multi(
+        rules_dict_surv,
+        rules_dict_fail,
+        probs,
+        comps_st_cond={},          # no conditioning
+        row_names=row_names,
+        s_fun=s_fun,
+        n_sample=300_000,
+        n_batch=100_000,
+    )
+
+    # Expected (from your sketch): failure ~ 0.02152, survival ~ 0.97848
+    # Here states are explicit: 0=failure, 1=survival
+    assert cond_probs[0] == pytest.approx(0.02152, rel=2e-2, abs=5e-4)
+    assert cond_probs[1] == pytest.approx(0.97848, rel=2e-2, abs=5e-4)
+
+
+# ---------- Single-state API test (returns {"failure","survival"}) ----------
+def test_get_comp_cond_sys_prob__two_state(def_five_comp):
+    failure_rules, survival_rules, probs, row_names, s_fun = def_five_comp
+
+    # For the single-threshold API, sys_surv_st=1 means system survives if state >= 1
+    torch.manual_seed(0)
+    cond_probs = tsum.get_comp_cond_sys_prob(
+        rules_mat_surv=survival_rules,
+        rules_mat_fail=failure_rules,
+        probs=probs,
+        comps_st_cond={},         # no conditioning
+        row_names=row_names,
+        s_fun=s_fun,
+        sys_surv_st=1,
+        n_sample=300_000,
+        n_batch=100_000,
+    )
+
+    assert cond_probs["failure"]  == pytest.approx(0.02152, rel=2e-2, abs=5e-4)
+    assert cond_probs["survival"] == pytest.approx(0.97848, rel=2e-2, abs=5e-4)
