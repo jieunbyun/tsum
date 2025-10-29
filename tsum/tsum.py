@@ -23,7 +23,7 @@ except Exception:
     _NUMPY_NUM = tuple()
 # -----
 
-def get_min_comps_st(comps_st, sys_st, max_st=0):
+def get_min_comps_st(comps_st, sys_st, max_state=0):
     """
     Get the minimal failing component states from a given state,
     by recording components in comps_st != max_st
@@ -37,14 +37,14 @@ def get_min_comps_st(comps_st, sys_st, max_st=0):
         (dict): {comp_name: ('comparison_operator', state (int))}
 
     """
-    if max_st: # get min failing component state
+    if max_state: # get min failing component state
         symbol = '<='
-        comp = operator.lt
+        op_comp = operator.lt
     else: # get min survival component state
         symbol = '>='
-        comp = operator.gt
+        op_comp = operator.gt
 
-    min_comps_st = {k: (symbol, v) for k, v in comps_st.items() if comp(v, max_st)}
+    min_comps_st = {k: (symbol, v) for k, v in comps_st.items() if op_comp(v, max_state)}
     min_comps_st['sys'] = (symbol, sys_st)
 
     return min_comps_st
@@ -53,8 +53,7 @@ def get_min_comps_st(comps_st, sys_st, max_st=0):
 def minimise_states_random(
     comps_st: Dict[str, int],
     sfun: Callable[[Dict[Any, int]], Tuple[Any, Tuple[str, int], Dict[Any, int]]],
-    sys_surv_st: int,
-    sys_fail_st: int,
+    sys_st: int,
     max_state: int = 0,  # only required for fail state
     *,
     fval: Optional[Any] = None,
@@ -92,7 +91,7 @@ def minimise_states_random(
         op_state = operator.ge
         op_prev = operator.add
         op_status = operator.le
-        sys_st = sys_fail_st
+        #sys_st = sys_fail_st
         removed_key = 'survival'
 
     else: # survival
@@ -101,7 +100,7 @@ def minimise_states_random(
         op_state = operator.le
         op_prev = operator.sub
         op_status = operator.ge
-        sys_st = sys_surv_st
+        #sys_st = sys_surv_st
         removed_key = 'failure'
 
     rng = random.Random(seed)
