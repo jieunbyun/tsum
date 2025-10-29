@@ -1,5 +1,6 @@
 import torch
 import itertools
+import operator
 from itertools import product, combinations
 from math import prod
 import math
@@ -22,41 +23,156 @@ except Exception:
     _NUMPY_NUM = tuple()
 # -----
 
-
-def get_min_fail_comps_st(comps_st, max_st, sys_fail_st):
+def get_min_comps_st(comps_st, sys_st, max_st=0):
     """
     Get the minimal failing component states from a given state,
     by recording components in comps_st != max_st
 
     Args:
         comps_st (dict): {comp_name: state (int)}
-        max_st (int): the highest state
-        sys_fail_st (int): the system failure state
+        sys_st (int): the system survial or failure state
+        max_st (int): the highest state for survival, only required for fail
 
     Returns:
         (dict): {comp_name: ('comparison_operator', state (int))}
 
     """
-    min_comps_st = {k: ('<=', v) for k, v in comps_st.items() if v < max_st}
-    min_comps_st['sys'] = ('<=', sys_fail_st)
+    if max_st: # get min failing component state
+        symbol = '<='
+        comp = operator.lt
+    else: # get min survival component state
+        symbol = '>='
+        comp = operator.gt
+
+    min_comps_st = {k: (symbol, v) for k, v in comps_st.items() if comp(v, max_st)}
+    min_comps_st['sys'] = (symbol, sys_st)
+
     return min_comps_st
 
-def get_min_surv_comps_st(comps_st, sys_surv_st):
-    """
-    Get the minimal surviving component states from a given state,
-    by recording components in comps_st != max_st
 
-    Args:
-        comps_st (dict): {comp_name: state (int)}
-        sys_surv_st (int): the system survival state
+def minimise_states_random(
+    comps_st: Dict[str, int],
+    sfun: Callable[[Dict[Any, int]], Tuple[Any, Tuple[str, int], Dict[Any, int]]],
+    sys_surv_st: int,
+    sys_fail_st: int,
+    max_state: int = 0,  # only required for fail state
+    *,
+    fval: Optional[Any] = None,
+    min_state: int = 0,
+    step: int = 1,
+    seed: Optional[int] = None,
+    exclude_keys: Iterable[str] = ("sys",)
+) -> Tuple[Dict[str, int], Dict[str, Any]]:
+    """
+    Random greedy reduction of component states.
+
+    Algorithm (given a random permutation of components):
+      - Try lowering each component by `step` (e.g., 1).
+      - Call sfun(modified_state).
+        Expect sfun to return a tuple where the 2nd element is int that represents a system state.
+      - If status >= sys_surv_st: keep the lowered value and continue cycling.
+        If the component reaches `min_state`, remove it (can't lower further).
+      - If status < sys_fail_st: revert the change and remove that component (no further attempts).
+
+    Stops when all components have been removed from the candidate pool.
 
     Returns:
-        (dict): {comp_name: ('comparison_operator', state (int))}
-
+      final_state, info
+        - final_state: dict of the minimized states.
+        - info: {
+            'permutation': [...],
+            'removed_on_failure': [comp,...],
+            'hit_min_state': [comp,...],
+            'attempts': int,
+          }
     """
-    min_comps_st = {k: ('>=', v) for k, v in comps_st.items() if v > 0}
-    min_comps_st['sys'] = ('>=', sys_surv_st)
-    return min_comps_st
+    if max_state: # fail 
+        op_comp = operator.lt
+        comp_val = max_state
+        op_state = operator.ge
+        op_prev = operator.add
+        op_status = operator.le
+        sys_st = sys_fail_st
+        removed_key = 'survival'
+
+    else: # survival
+        op_comp = operator.gt
+        comp_val = min_state
+        op_state = operator.le
+        op_prev = operator.sub
+        op_status = operator.ge
+        sys_st = sys_surv_st
+        removed_key = 'failure'
+
+    rng = random.Random(seed)
+
+    # Work on a (shallow) copy; do NOT mutate caller's dict (value int is immutable)
+    state = dict(comps_st)
+
+    # Build candidate component key deque from a random permutation
+    candidates = [k for k, v in state.items()
+                  if k not in set(exclude_keys) and isinstance(v, int) and op_comp(v, comp_val)]
+    rng.shuffle(candidates)
+    dq = deque(candidates)
+
+    removed = []
+    hit_min_state = []
+    attempts = 0
+
+    while dq:
+        comp = dq[0]
+
+        # If already at/below min_state, remove and continue
+        #if state.get(comp, min_state) <= min_state: # state[comp] always works
+        if op_state(state[comp], comp_val): # state[comp] always works
+            dq.popleft()
+            hit_min_state.append(comp)
+            continue
+
+        prev = state[comp]
+        fval_prev = fval
+        state[comp] = op_prev(prev, step)
+        attempts += 1
+
+        # Expect sfun to return (value, 's'/'f', info) or similar
+        try:
+            fval, status, _ = sfun(state)
+        except Exception as e:
+            # If your sfun has a different signature, surface the error clearly
+            state[comp] = prev  # revert
+            fval = fval_prev
+            dq.popleft()
+            removed.append(comp)
+            continue
+
+        if op_status(status, sys_st):
+            # Keep lowered value
+            if op_state(state[comp], comp_val):
+                dq.popleft()
+                hit_min_state.append(comp)
+            else:
+                dq.rotate(-1)  # move to back; try again later
+        else:
+            # Revert and remove from further consideration
+            state[comp] = prev
+            fval = fval_prev
+            dq.popleft()
+            removed.append(comp)
+
+    info = {
+        'permutation': candidates,
+        f'removed_on_{removed_key}': removed,
+        'hit_min_state': hit_min_state,
+        'attempts': attempts,
+        'final_state': state,
+        'final_sys_state': fval
+    }
+
+    min_rule = get_min_comps_st(state, sys_st, max_state)
+
+    return min_rule, info
+
+
 
 def minimise_surv_states_random(
     comps_st: Dict[str, int],
@@ -94,10 +210,10 @@ def minimise_surv_states_random(
     """
     rng = random.Random(seed)
 
-    # Work on a copy; do NOT mutate caller's dict
+    # Work on a (shallow) copy; do NOT mutate caller's dict (value int is immutable)
     state = dict(comps_st)
 
-    # Build candidate deque from a random permutation
+    # Build candidate component key deque from a random permutation
     candidates = [k for k, v in state.items()
                   if k not in set(exclude_keys) and isinstance(v, int) and v > min_state]
     rng.shuffle(candidates)
@@ -111,7 +227,8 @@ def minimise_surv_states_random(
         comp = dq[0]
 
         # If already at/below min_state, remove and continue
-        if state.get(comp, min_state) <= min_state:
+        #if state.get(comp, min_state) <= min_state: # state[comp] always works
+        if state[comp] <= min_state: # state[comp] always works
             dq.popleft()
             hit_min_state.append(comp)
             continue
@@ -1214,7 +1331,7 @@ def run_rule_extraction(
     rules_mat_surv: Tensor = None,
     rules_mat_fail: Tensor = None,
     # Analysis parameters
-    stochastic_search: bool = True, 
+    stochastic_search: bool = True,
     gamma: float = 0.5, # if stochastic_search==False, ignored. 0 < γ < 1 → more emphasis on exploration; γ > 1 → more emphasis on exploitation
     # Termination / threshold settings
     unk_prob_thres: float = 5e-2,
@@ -1257,12 +1374,9 @@ def run_rule_extraction(
                 return 0.0
             # If it's a list-like of rules:
             if hasattr(rule_store, "__len__") and len(rule_store) > 0:
-                total = 0
-                count = 0
-                for r in rule_store:
-                    total += len(r) - 1
-                    count += 1
-                return float(total) / count if count else 0.0
+                total = sum([len(r) - 1 for r in rule_store])
+                count = len(rule_store)
+                return float(total) / count
         except Exception:
             pass
         return 0.0

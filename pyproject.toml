@@ -31,3 +31,8 @@ include = ["tsum*"]
 minversion = "7.0"
 addopts = "-ra -q"
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.30.1",
+]

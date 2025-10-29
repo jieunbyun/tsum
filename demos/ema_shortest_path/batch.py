@@ -26,12 +26,13 @@ def s_fun(comps_st):
             comps_st, G_base, origin, dests,
             avg_speed=60, # km/h
             target_max = 0.5, # hours: it shouldn't take longer than this compared to the original travel time
+            #target_max = [1.5, 0.5], # hours: it shouldn't take longer than this compared to the original travel time
             length_attr = 'length_km')
 
-    if sys_st == 's':
+    if sys_st >= sys_surv_st:
        path = info['path_filtered_edges']
        min_comps_st = {eid: ('>=', 1) for eid in path} # edges in the path are working
-       min_comps_st['sys'] = ('>=', 1) # system edge is also working
+       min_comps_st['sys'] = ('>=', sys_st) # system edge is also working
 
     else:
         min_comps_st = None
@@ -39,10 +40,11 @@ def s_fun(comps_st):
     return travel_time, sys_st, min_comps_st
 
 
-@app.command()
-def main():
 
-    global G_base, origin, dests
+@app.command()
+def check_system():
+
+    global G_base, origin, dests, sys_surv_st
 
     DATASET = HOME.joinpath('./data')
 
@@ -55,9 +57,36 @@ def main():
     #origin = 'n1'
     origin = 'n32'
     dests = ['n22', 'n66']
+    sys_surv_st = 2
 
-    row_names = list(edges.keys()) + ['sys']
-    n_state = 2 # binary states
+    row_names = list(edges.keys())
+    n_state = 2 # binary states of components
+
+    comps_st = {eid: 1 for eid in edges.keys()}
+    travel_time, sys_st, info = s_fun(comps_st)
+    print(f"travel_time: {travel_time}, sys_st: {sys_st}, info: {info}")
+
+
+@app.command()
+def main():
+
+    global G_base, origin, dests, sys_surv_st
+
+    DATASET = HOME.joinpath('./data')
+
+    nodes = json.loads((DATASET / "nodes.json").read_text(encoding="utf-8"))
+    edges = json.loads((DATASET / "edges.json").read_text(encoding="utf-8"))
+    probs_dict = json.loads((DATASET / "probs_bin.json").read_text(encoding="utf-8"))
+
+    G_base = build_graph(nodes, edges, probs_dict)
+
+    #origin = 'n1'
+    origin = 'n32'
+    dests = ['n22', 'n66']
+    sys_surv_st = 2
+
+    row_names = list(edges.keys())
+    n_state = 2 # binary states of components
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     probs = [[probs_dict[n]['0']['p'], probs_dict[n]['1']['p']] for n in row_names[:-1]]
