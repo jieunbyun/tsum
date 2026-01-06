@@ -1,0 +1,13 @@
+LICENSE
+README.md
+pyproject.toml
+tests/test_tsum.py
+tests/test_utils.py
+tsum/__init__.py
+tsum/tsum.py
+tsum/utils.py
+tsum.egg-info/PKG-INFO
+tsum.egg-info/SOURCES.txt
+tsum.egg-info/dependency_links.txt
+tsum.egg-info/requires.txt
+tsum.egg-info/top_level.txt
