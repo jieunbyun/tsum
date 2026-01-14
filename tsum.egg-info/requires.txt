@@ -1,0 +1,6 @@
+numpy>=1.21
+torch>=1.13
+networkx>=3.0
+jsonschema>=4.0
+pyyaml>=6.0
+pytest>=8.4.2
