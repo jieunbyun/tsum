@@ -2,7 +2,7 @@
 *.pyc
 *.m
 .DS_Store
-*.ipynb
+# *.ipynb
 .ipynb_checkpoints
 *.coverage
 *.swp
