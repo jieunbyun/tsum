@@ -1,7 +1,8 @@
 [
     {
         "Component":"e0001",
-        "Robustness Index":0.9999955893,
+        "Robustness index, multi-state":0.9999955893,
+        "Robustness index, binary":0.9999987209,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -13,7 +14,8 @@
     },
     {
         "Component":"e0002",
-        "Robustness Index":0.9999894542,
+        "Robustness index, multi-state":0.9999894542,
+        "Robustness index, binary":0.9999995852,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -25,7 +27,8 @@
     },
     {
         "Component":"e0003",
-        "Robustness Index":0.9999996319,
+        "Robustness index, multi-state":0.9999996319,
+        "Robustness index, binary":0.9999996689,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -37,7 +40,8 @@
     },
     {
         "Component":"e0004",
-        "Robustness Index":0.0640223703,
+        "Robustness index, multi-state":0.0640223703,
+        "Robustness index, binary":0.9999813376,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -49,7 +53,8 @@
     },
     {
         "Component":"e0005",
-        "Robustness Index":0.9974171528,
+        "Robustness index, multi-state":0.9974171528,
+        "Robustness index, binary":0.9974702078,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -61,7 +66,8 @@
     },
     {
         "Component":"e0006",
-        "Robustness Index":0.9999836012,
+        "Robustness index, multi-state":0.9999836012,
+        "Robustness index, binary":0.9999996689,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -73,7 +79,8 @@
     },
     {
         "Component":"e0007",
-        "Robustness Index":0.9999981182,
+        "Robustness index, multi-state":0.9999981182,
+        "Robustness index, binary":0.9999994412,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -85,7 +92,8 @@
     },
     {
         "Component":"e0008",
-        "Robustness Index":0.9999960845,
+        "Robustness index, multi-state":0.9999960845,
+        "Robustness index, binary":0.9999982903,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -97,7 +105,8 @@
     },
     {
         "Component":"e0009",
-        "Robustness Index":0.9999969688,
+        "Robustness index, multi-state":0.9999969688,
+        "Robustness index, binary":0.9999971061,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -109,7 +118,8 @@
     },
     {
         "Component":"e0010",
-        "Robustness Index":0.9999948673,
+        "Robustness index, multi-state":0.9999948673,
+        "Robustness index, binary":0.9999949385,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -121,7 +131,8 @@
     },
     {
         "Component":"e0011",
-        "Robustness Index":0.9999995979,
+        "Robustness index, multi-state":0.9999995979,
+        "Robustness index, binary":0.9999999459,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -133,7 +144,8 @@
     },
     {
         "Component":"e0012",
-        "Robustness Index":0.9999998933,
+        "Robustness index, multi-state":0.9999998933,
+        "Robustness index, binary":0.999999982,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -145,7 +157,8 @@
     },
     {
         "Component":"e0013",
-        "Robustness Index":0.9999904589,
+        "Robustness index, multi-state":0.9999904589,
+        "Robustness index, binary":0.9999984704,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -157,7 +170,8 @@
     },
     {
         "Component":"e0014",
-        "Robustness Index":0.9999950759,
+        "Robustness index, multi-state":0.9999950759,
+        "Robustness index, binary":0.9999969819,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -169,7 +183,8 @@
     },
     {
         "Component":"e0015",
-        "Robustness Index":0.9999981677,
+        "Robustness index, multi-state":0.9999981677,
+        "Robustness index, binary":0.9999987991,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -181,7 +196,8 @@
     },
     {
         "Component":"e0016",
-        "Robustness Index":0.9999974777,
+        "Robustness index, multi-state":0.9999974777,
+        "Robustness index, binary":0.9999977931,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -193,7 +209,8 @@
     },
     {
         "Component":"e0017",
-        "Robustness Index":0.9999948446,
+        "Robustness index, multi-state":0.9999948446,
+        "Robustness index, binary":0.9999984704,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -205,7 +222,8 @@
     },
     {
         "Component":"e0018",
-        "Robustness Index":0.8341972893,
+        "Robustness index, multi-state":0.8341972893,
+        "Robustness index, binary":0.9999967249,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -217,7 +235,8 @@
     },
     {
         "Component":"e0019",
-        "Robustness Index":0.9999940304,
+        "Robustness index, multi-state":0.9999940304,
+        "Robustness index, binary":0.9999974621,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -229,7 +248,8 @@
     },
     {
         "Component":"e0020",
-        "Robustness Index":0.9999989645,
+        "Robustness index, multi-state":0.9999989645,
+        "Robustness index, binary":0.9999993329,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -241,7 +261,8 @@
     },
     {
         "Component":"e0021",
-        "Robustness Index":0.9999907442,
+        "Robustness index, multi-state":0.9999907442,
+        "Robustness index, binary":0.9999990864,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -253,7 +274,8 @@
     },
     {
         "Component":"e0022",
-        "Robustness Index":0.9999968777,
+        "Robustness index, multi-state":0.9999968777,
+        "Robustness index, binary":0.9999992147,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -265,7 +287,8 @@
     },
     {
         "Component":"e0023",
-        "Robustness Index":0.9999845473,
+        "Robustness index, multi-state":0.9999845473,
+        "Robustness index, binary":0.9999890174,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -277,7 +300,8 @@
     },
     {
         "Component":"e0024",
-        "Robustness Index":0.0638424998,
+        "Robustness index, multi-state":0.0638424998,
+        "Robustness index, binary":0.9968586689,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -289,7 +313,8 @@
     },
     {
         "Component":"e0025",
-        "Robustness Index":0.999998721,
+        "Robustness index, multi-state":0.999998721,
+        "Robustness index, binary":0.9999994916,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -301,7 +326,8 @@
     },
     {
         "Component":"e0026",
-        "Robustness Index":0.9999937722,
+        "Robustness index, multi-state":0.9999937722,
+        "Robustness index, binary":0.9999947702,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -313,7 +339,8 @@
     },
     {
         "Component":"e0027",
-        "Robustness Index":0.9999924148,
+        "Robustness index, multi-state":0.9999924148,
+        "Robustness index, binary":0.9999977931,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -325,7 +352,8 @@
     },
     {
         "Component":"e0028",
-        "Robustness Index":0.999984261,
+        "Robustness index, multi-state":0.999984261,
+        "Robustness index, binary":0.9999951037,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -337,7 +365,8 @@
     },
     {
         "Component":"e0029",
-        "Robustness Index":0.9999971533,
+        "Robustness index, multi-state":0.9999971533,
+        "Robustness index, binary":0.9999972276,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -349,7 +378,8 @@
     },
     {
         "Component":"e0030",
-        "Robustness Index":0.9999904776,
+        "Robustness index, multi-state":0.9999904776,
+        "Robustness index, binary":0.9999989479,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -361,7 +391,8 @@
     },
     {
         "Component":"e0031",
-        "Robustness Index":0.9999877561,
+        "Robustness index, multi-state":0.9999877561,
+        "Robustness index, binary":0.9999977931,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -373,7 +404,8 @@
     },
     {
         "Component":"e0032",
-        "Robustness Index":0.9998928694,
+        "Robustness index, multi-state":0.9998928694,
+        "Robustness index, binary":0.9999955812,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -385,7 +417,8 @@
     },
     {
         "Component":"e0033",
-        "Robustness Index":0.9999684083,
+        "Robustness index, multi-state":0.9999684083,
+        "Robustness index, binary":0.9999974621,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -397,7 +430,8 @@
     },
     {
         "Component":"e0034",
-        "Robustness Index":0.9999882273,
+        "Robustness index, multi-state":0.9999882273,
+        "Robustness index, binary":0.9999991518,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -409,7 +443,8 @@
     },
     {
         "Component":"e0035",
-        "Robustness Index":0.9999867646,
+        "Robustness index, multi-state":0.9999867646,
+        "Robustness index, binary":0.9999999083,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -421,7 +456,8 @@
     },
     {
         "Component":"e0036",
-        "Robustness Index":0.9970568817,
+        "Robustness index, multi-state":0.9970568817,
+        "Robustness index, binary":0.9971138037,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -433,7 +469,8 @@
     },
     {
         "Component":"e0037",
-        "Robustness Index":0.9956447286,
+        "Robustness index, multi-state":0.9956447286,
+        "Robustness index, binary":0.9973625713,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -445,7 +482,8 @@
     },
     {
         "Component":"e0038",
-        "Robustness Index":0.9999869523,
+        "Robustness index, multi-state":0.9999869523,
+        "Robustness index, binary":0.9999988748,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -457,7 +495,8 @@
     },
     {
         "Component":"e0039",
-        "Robustness Index":0.9999934687,
+        "Robustness index, multi-state":0.9999934687,
+        "Robustness index, binary":0.9999992751,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -469,7 +508,8 @@
     },
     {
         "Component":"e0040",
-        "Robustness Index":0.9999867904,
+        "Robustness index, multi-state":0.9999867904,
+        "Robustness index, binary":0.999999743,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -481,7 +521,8 @@
     },
     {
         "Component":"e0041",
-        "Robustness Index":0.9999694946,
+        "Robustness index, multi-state":0.9999694946,
+        "Robustness index, binary":0.999987559,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -493,7 +534,8 @@
     },
     {
         "Component":"e0042",
-        "Robustness Index":0.9999814097,
+        "Robustness index, multi-state":0.9999814097,
+        "Robustness index, binary":0.999994198,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -505,7 +547,8 @@
     },
     {
         "Component":"e0043",
-        "Robustness Index":0.9999132115,
+        "Robustness index, multi-state":0.9999132115,
+        "Robustness index, binary":0.9999990184,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -517,7 +560,8 @@
     },
     {
         "Component":"e0044",
-        "Robustness Index":0.9999769511,
+        "Robustness index, multi-state":0.9999769511,
+        "Robustness index, binary":0.9999994916,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -529,7 +573,8 @@
     },
     {
         "Component":"e0045",
-        "Robustness Index":0.999971126,
+        "Robustness index, multi-state":0.999971126,
+        "Robustness index, binary":0.9999960667,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -541,7 +586,8 @@
     },
     {
         "Component":"e0046",
-        "Robustness Index":0.9999079283,
+        "Robustness index, multi-state":0.9999079283,
+        "Robustness index, binary":0.9999312055,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -553,7 +599,8 @@
     },
     {
         "Component":"e0047",
-        "Robustness Index":0.9999843565,
+        "Robustness index, multi-state":0.9999843565,
+        "Robustness index, binary":0.9999980001,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -565,7 +612,8 @@
     },
     {
         "Component":"e0048",
-        "Robustness Index":0.9999948723,
+        "Robustness index, multi-state":0.9999948723,
+        "Robustness index, binary":0.9999977931,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -577,7 +625,8 @@
     },
     {
         "Component":"e0049",
-        "Robustness Index":0.9999361082,
+        "Robustness index, multi-state":0.9999361082,
+        "Robustness index, binary":0.9999382383,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -589,7 +638,8 @@
     },
     {
         "Component":"e0050",
-        "Robustness Index":0.9999882001,
+        "Robustness index, multi-state":0.9999882001,
+        "Robustness index, binary":0.9999996282,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -601,7 +651,8 @@
     },
     {
         "Component":"e0051",
-        "Robustness Index":0.9999940646,
+        "Robustness index, multi-state":0.9999940646,
+        "Robustness index, binary":0.999997898,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -613,7 +664,8 @@
     },
     {
         "Component":"e0052",
-        "Robustness Index":0.9999921649,
+        "Robustness index, multi-state":0.9999921649,
+        "Robustness index, binary":0.99999864,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -625,7 +677,8 @@
     },
     {
         "Component":"e0053",
-        "Robustness Index":0.9999930885,
+        "Robustness index, multi-state":0.9999930885,
+        "Robustness index, binary":0.9999980995,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -637,7 +690,8 @@
     },
     {
         "Component":"e0054",
-        "Robustness Index":0.9999336596,
+        "Robustness index, multi-state":0.9999336596,
+        "Robustness index, binary":0.9999363118,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -649,7 +703,8 @@
     },
     {
         "Component":"e0055",
-        "Robustness Index":0.9999560072,
+        "Robustness index, multi-state":0.9999560072,
+        "Robustness index, binary":0.9999586203,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -661,7 +716,8 @@
     },
     {
         "Component":"e0056",
-        "Robustness Index":0.9838895171,
+        "Robustness index, multi-state":0.9838895171,
+        "Robustness index, binary":0.983912618,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -673,7 +729,8 @@
     },
     {
         "Component":"e0057",
-        "Robustness Index":0.9999941091,
+        "Robustness index, multi-state":0.9999941091,
+        "Robustness index, binary":0.9999961764,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -685,7 +742,8 @@
     },
     {
         "Component":"e0058",
-        "Robustness Index":0.9999948585,
+        "Robustness index, multi-state":0.9999948585,
+        "Robustness index, binary":0.9999963178,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -697,7 +755,8 @@
     },
     {
         "Component":"e0059",
-        "Robustness Index":0.9974909342,
+        "Robustness index, multi-state":0.9974909342,
+        "Robustness index, binary":0.9975446836,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -709,7 +768,8 @@
     },
     {
         "Component":"e0060",
-        "Robustness Index":0.9999441966,
+        "Robustness index, multi-state":0.9999441966,
+        "Robustness index, binary":0.9999442585,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -721,7 +781,8 @@
     },
     {
         "Component":"e0061",
-        "Robustness Index":0.9999808464,
+        "Robustness index, multi-state":0.9999808464,
+        "Robustness index, binary":0.9999873554,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -733,7 +794,8 @@
     },
     {
         "Component":"e0062",
-        "Robustness Index":0.9999891128,
+        "Robustness index, multi-state":0.9999891128,
+        "Robustness index, binary":0.9999965921,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -745,7 +807,8 @@
     },
     {
         "Component":"e0063",
-        "Robustness Index":0.9999779211,
+        "Robustness index, multi-state":0.9999779211,
+        "Robustness index, binary":0.999998974,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -757,7 +820,8 @@
     },
     {
         "Component":"e0064",
-        "Robustness Index":0.99998938,
+        "Robustness index, multi-state":0.99998938,
+        "Robustness index, binary":0.9999920092,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -769,7 +833,8 @@
     },
     {
         "Component":"e0065",
-        "Robustness Index":0.9999924371,
+        "Robustness index, multi-state":0.9999924371,
+        "Robustness index, binary":0.9999952659,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -781,7 +846,8 @@
     },
     {
         "Component":"e0066",
-        "Robustness Index":0.9999944283,
+        "Robustness index, multi-state":0.9999944283,
+        "Robustness index, binary":0.9999971061,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -793,7 +859,8 @@
     },
     {
         "Component":"e0067",
-        "Robustness Index":0.999995075,
+        "Robustness index, multi-state":0.999995075,
+        "Robustness index, binary":0.9999990864,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -805,7 +872,8 @@
     },
     {
         "Component":"e0068",
-        "Robustness Index":0.9999934438,
+        "Robustness index, multi-state":0.9999934438,
+        "Robustness index, binary":0.999995425,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -817,7 +885,8 @@
     },
     {
         "Component":"e0069",
-        "Robustness Index":0.9999977047,
+        "Robustness index, multi-state":0.9999977047,
+        "Robustness index, binary":0.9999990864,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -829,7 +898,8 @@
     },
     {
         "Component":"e0070",
-        "Robustness Index":0.99999879,
+        "Robustness index, multi-state":0.99999879,
+        "Robustness index, binary":0.9999990184,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -841,7 +911,8 @@
     },
     {
         "Component":"e0071",
-        "Robustness Index":0.9999998007,
+        "Robustness index, multi-state":0.9999998007,
+        "Robustness index, binary":0.9999999083,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -853,7 +924,8 @@
     },
     {
         "Component":"e0072",
-        "Robustness Index":0.9999968605,
+        "Robustness index, multi-state":0.9999968605,
+        "Robustness index, binary":0.9999987209,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -865,7 +937,8 @@
     },
     {
         "Component":"e0073",
-        "Robustness Index":0.9999991485,
+        "Robustness index, multi-state":0.9999991485,
+        "Robustness index, binary":0.9999991518,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -877,7 +950,8 @@
     },
     {
         "Component":"e0074",
-        "Robustness Index":0.9999726556,
+        "Robustness index, multi-state":0.9999726556,
+        "Robustness index, binary":0.9999867359,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -889,7 +963,8 @@
     },
     {
         "Component":"e0075",
-        "Robustness Index":0.9996527647,
+        "Robustness index, multi-state":0.9996527647,
+        "Robustness index, binary":0.9998886106,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -901,7 +976,8 @@
     },
     {
         "Component":"e0076",
-        "Robustness Index":0.9880433467,
+        "Robustness index, multi-state":0.9880433467,
+        "Robustness index, binary":0.9880585135,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -913,7 +989,8 @@
     },
     {
         "Component":"e0077",
-        "Robustness Index":0.9997094737,
+        "Robustness index, multi-state":0.9997094737,
+        "Robustness index, binary":0.9999142258,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -925,7 +1002,8 @@
     },
     {
         "Component":"e0078",
-        "Robustness Index":0.9878221191,
+        "Robustness index, multi-state":0.9878221191,
+        "Robustness index, binary":0.9878742243,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -937,7 +1015,8 @@
     },
     {
         "Component":"e0079",
-        "Robustness Index":0.9999951518,
+        "Robustness index, multi-state":0.9999951518,
+        "Robustness index, binary":0.9999975752,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -949,7 +1028,8 @@
     },
     {
         "Component":"e0080",
-        "Robustness Index":0.9999333543,
+        "Robustness index, multi-state":0.9999333543,
+        "Robustness index, binary":0.9999998076,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -961,7 +1041,8 @@
     },
     {
         "Component":"e0081",
-        "Robustness Index":0.9999877254,
+        "Robustness index, multi-state":0.9999877254,
+        "Robustness index, binary":0.9999973462,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -973,7 +1054,8 @@
     },
     {
         "Component":"e0082",
-        "Robustness Index":0.9999926123,
+        "Robustness index, multi-state":0.9999926123,
+        "Robustness index, binary":0.9999985565,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -985,7 +1067,8 @@
     },
     {
         "Component":"e0083",
-        "Robustness Index":0.9999816163,
+        "Robustness index, multi-state":0.9999816163,
+        "Robustness index, binary":0.9999990184,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -997,7 +1080,8 @@
     },
     {
         "Component":"e0084",
-        "Robustness Index":0.9999844354,
+        "Robustness index, multi-state":0.9999844354,
+        "Robustness index, binary":0.9999968548,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1009,7 +1093,8 @@
     },
     {
         "Component":"e0085",
-        "Robustness Index":0.9999846221,
+        "Robustness index, multi-state":0.9999846221,
+        "Robustness index, binary":0.9999951037,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1021,7 +1106,8 @@
     },
     {
         "Component":"e0086",
-        "Robustness Index":0.9999946884,
+        "Robustness index, multi-state":0.9999946884,
+        "Robustness index, binary":0.9999998626,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1033,7 +1119,8 @@
     },
     {
         "Component":"e0087",
-        "Robustness Index":0.999995556,
+        "Robustness index, multi-state":0.999995556,
+        "Robustness index, binary":0.9999998626,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1045,7 +1132,8 @@
     },
     {
         "Component":"e0088",
-        "Robustness Index":0.9999986392,
+        "Robustness index, multi-state":0.9999986392,
+        "Robustness index, binary":0.99999864,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1057,7 +1145,8 @@
     },
     {
         "Component":"e0089",
-        "Robustness Index":0.9999813884,
+        "Robustness index, multi-state":0.9999813884,
+        "Robustness index, binary":0.9999945989,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1069,7 +1158,8 @@
     },
     {
         "Component":"e0090",
-        "Robustness Index":0.9999956405,
+        "Robustness index, multi-state":0.9999956405,
+        "Robustness index, binary":0.9999976855,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1081,7 +1171,8 @@
     },
     {
         "Component":"e0091",
-        "Robustness Index":0.9999951262,
+        "Robustness index, multi-state":0.9999951262,
+        "Robustness index, binary":0.9999981963,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1093,7 +1184,8 @@
     },
     {
         "Component":"e0092",
-        "Robustness Index":0.9999995011,
+        "Robustness index, multi-state":0.9999995011,
+        "Robustness index, binary":0.999999743,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1105,7 +1197,8 @@
     },
     {
         "Component":"e0093",
-        "Robustness Index":0.999999106,
+        "Robustness index, multi-state":0.999999106,
+        "Robustness index, binary":0.9999996689,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1117,7 +1210,8 @@
     },
     {
         "Component":"e0094",
-        "Robustness Index":0.999996287,
+        "Robustness index, multi-state":0.999996287,
+        "Robustness index, binary":0.9999963178,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1129,7 +1223,8 @@
     },
     {
         "Component":"e0095",
-        "Robustness Index":0.9999957626,
+        "Robustness index, multi-state":0.9999957626,
+        "Robustness index, binary":0.9999975752,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1141,7 +1236,8 @@
     },
     {
         "Component":"e0096",
-        "Robustness Index":0.9999868177,
+        "Robustness index, multi-state":0.9999868177,
+        "Robustness index, binary":0.9999984704,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1153,7 +1249,8 @@
     },
     {
         "Component":"e0097",
-        "Robustness Index":0.9999858835,
+        "Robustness index, multi-state":0.9999858835,
+        "Robustness index, binary":0.9999983817,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1165,7 +1262,8 @@
     },
     {
         "Component":"e0098",
-        "Robustness Index":0.9999820037,
+        "Robustness index, multi-state":0.9999820037,
+        "Robustness index, binary":0.9999993883,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1177,7 +1275,8 @@
     },
     {
         "Component":"e0099",
-        "Robustness Index":0.9999992142,
+        "Robustness index, multi-state":0.9999992142,
+        "Robustness index, binary":0.9999992147,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1189,7 +1288,8 @@
     },
     {
         "Component":"e0100",
-        "Robustness Index":0.999999339,
+        "Robustness index, multi-state":0.999999339,
+        "Robustness index, binary":0.9999999083,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1201,7 +1301,8 @@
     },
     {
         "Component":"e0101",
-        "Robustness Index":0.9999906923,
+        "Robustness index, multi-state":0.9999906923,
+        "Robustness index, binary":0.9999958847,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1213,7 +1314,8 @@
     },
     {
         "Component":"e0102",
-        "Robustness Index":0.9999986854,
+        "Robustness index, multi-state":0.9999986854,
+        "Robustness index, binary":0.9999996282,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1225,7 +1327,8 @@
     },
     {
         "Component":"e0103",
-        "Robustness Index":0.999986875,
+        "Robustness index, multi-state":0.999986875,
+        "Robustness index, binary":0.9999981963,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1237,7 +1340,8 @@
     },
     {
         "Component":"e0104",
-        "Robustness Index":0.9999886779,
+        "Robustness index, multi-state":0.9999886779,
+        "Robustness index, binary":0.9999887571,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1249,7 +1353,8 @@
     },
     {
         "Component":"e0105",
-        "Robustness Index":0.9999946245,
+        "Robustness index, multi-state":0.9999946245,
+        "Robustness index, binary":0.9999983817,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1261,7 +1366,8 @@
     },
     {
         "Component":"e0106",
-        "Robustness Index":0.9999970012,
+        "Robustness index, multi-state":0.9999970012,
+        "Robustness index, binary":0.9999992147,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1273,7 +1379,8 @@
     },
     {
         "Component":"e0107",
-        "Robustness Index":0.9999973712,
+        "Robustness index, multi-state":0.9999973712,
+        "Robustness index, binary":0.9999998363,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1285,7 +1392,8 @@
     },
     {
         "Component":"e0108",
-        "Robustness Index":0.999322911,
+        "Robustness index, multi-state":0.999322911,
+        "Robustness index, binary":0.9999996689,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1297,7 +1405,8 @@
     },
     {
         "Component":"e0109",
-        "Robustness Index":0.9992731603,
+        "Robustness index, multi-state":0.9992731603,
+        "Robustness index, binary":0.9999947702,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1309,7 +1418,8 @@
     },
     {
         "Component":"e0110",
-        "Robustness Index":0.9991974235,
+        "Robustness index, multi-state":0.9991974235,
+        "Robustness index, binary":0.9999945989,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1321,7 +1431,8 @@
     },
     {
         "Component":"e0111",
-        "Robustness Index":0.9994677252,
+        "Robustness index, multi-state":0.9994677252,
+        "Robustness index, binary":0.9999983817,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1333,7 +1444,8 @@
     },
     {
         "Component":"e0112",
-        "Robustness Index":0.9995230729,
+        "Robustness index, multi-state":0.9995230729,
+        "Robustness index, binary":0.9999990864,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1345,7 +1457,8 @@
     },
     {
         "Component":"e0113",
-        "Robustness Index":0.9994458433,
+        "Robustness index, multi-state":0.9994458433,
+        "Robustness index, binary":0.9994464805,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1357,7 +1470,8 @@
     },
     {
         "Component":"e0114",
-        "Robustness Index":0.9998294292,
+        "Robustness index, multi-state":0.9998294292,
+        "Robustness index, binary":0.9998303887,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1369,7 +1483,8 @@
     },
     {
         "Component":"e0115",
-        "Robustness Index":0.9768690791,
+        "Robustness index, multi-state":0.9768690791,
+        "Robustness index, binary":0.9999997208,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1381,7 +1496,8 @@
     },
     {
         "Component":"e0116",
-        "Robustness Index":0.9999959365,
+        "Robustness index, multi-state":0.9999959365,
+        "Robustness index, binary":0.999997898,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1393,7 +1509,8 @@
     },
     {
         "Component":"e0117",
-        "Robustness Index":0.9999795279,
+        "Robustness index, multi-state":0.9999795279,
+        "Robustness index, binary":0.9999981963,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1405,7 +1522,8 @@
     },
     {
         "Component":"e0118",
-        "Robustness Index":0.9974988497,
+        "Robustness index, multi-state":0.9974988497,
+        "Robustness index, binary":0.9999994766,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1417,7 +1535,8 @@
     },
     {
         "Component":"e0119",
-        "Robustness Index":0.9998619056,
+        "Robustness index, multi-state":0.9998619056,
+        "Robustness index, binary":0.9999806094,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1429,7 +1548,8 @@
     },
     {
         "Component":"e0120",
-        "Robustness Index":0.9999964099,
+        "Robustness index, multi-state":0.9999964099,
+        "Robustness index, binary":0.9999971061,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1441,7 +1561,8 @@
     },
     {
         "Component":"e0121",
-        "Robustness Index":0.9998078746,
+        "Robustness index, multi-state":0.9998078746,
+        "Robustness index, binary":0.9998081453,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1453,7 +1574,8 @@
     },
     {
         "Component":"e0122",
-        "Robustness Index":0.9994929101,
+        "Robustness index, multi-state":0.9994929101,
+        "Robustness index, binary":0.9999998867,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1465,7 +1587,8 @@
     },
     {
         "Component":"e0123",
-        "Robustness Index":0.9463996322,
+        "Robustness index, multi-state":0.9463996322,
+        "Robustness index, binary":0.9999998867,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1477,7 +1600,8 @@
     },
     {
         "Component":"e0124",
-        "Robustness Index":0.9812840331,
+        "Robustness index, multi-state":0.9812840331,
+        "Robustness index, binary":0.9999985565,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1489,7 +1613,8 @@
     },
     {
         "Component":"e0125",
-        "Robustness Index":0.0134435076,
+        "Robustness index, multi-state":0.0134435076,
+        "Robustness index, binary":0.9998941839,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1501,7 +1626,8 @@
     },
     {
         "Component":"e0126",
-        "Robustness Index":0.9999959841,
+        "Robustness index, multi-state":0.9999959841,
+        "Robustness index, binary":0.9999964564,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1513,7 +1639,8 @@
     },
     {
         "Component":"e0127",
-        "Robustness Index":0.9983422361,
+        "Robustness index, multi-state":0.9983422361,
+        "Robustness index, binary":0.9999993329,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1525,7 +1652,8 @@
     },
     {
         "Component":"e0128",
-        "Robustness Index":0.9999987969,
+        "Robustness index, multi-state":0.9999987969,
+        "Robustness index, binary":0.9999988748,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
@@ -1537,7 +1665,8 @@
     },
     {
         "Component":"e0129",
-        "Robustness Index":0.9998202471,
+        "Robustness index, multi-state":0.9998202471,
+        "Robustness index, binary":0.9999637788,
         "P(System failure | No damage)":0.000448,
         "P(Partial failure | No damage)":0.197756,
         "P(System survival | No damage)":0.801796,
