@@ -17,3 +17,9 @@
 *.pdf
 @*
 +*
+# quarto
+_site/
+_freeze/
+.quarto/
+__pycache__/
+.ipynb_checkpoints/
