@@ -1,9 +1,9 @@
-# ws_n60_k6_b015
+# rg1
 
 Generated dataset (v1).
 
 ## Description
-WS n=60 k=6 beta=0.15
+n_nodes=60, radius=0.25, p_fail=0.05
 
 ## Files
 - `data/nodes.json`
@@ -11,11 +11,10 @@ WS n=60 k=6 beta=0.15
 - `data/probs.json`
 
 ## Generator
-- type: `ws`
+- type: `rg`
 - params: `{
   "n_nodes": 60,
-  "k": 6,
-  "p_ws": 0.15,
-  "p_fail": 0.1,
+  "radius": 0.25,
+  "p_fail": 0.05,
   "seed": 7
 }`
