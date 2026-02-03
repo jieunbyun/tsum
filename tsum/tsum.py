@@ -8,6 +8,7 @@ import numpy as np
 import os, json, time
 from typing import Callable, Dict, Any, List, Optional, Tuple, Sequence, Iterable, Union
 from torch import Tensor
+import psutil
 
 import random
 from collections import deque
@@ -1917,6 +1918,7 @@ def run_rule_extraction_by_mcs(
 
             # metrics, persist, then break condition handled by while guard
             dt = time.perf_counter() - t0
+            rss_gb = psutil.Process().memory_info().rss / (1024**3)
             metrics_log.append({
                 "round": n_round,
                 "time_sec": dt,
@@ -1929,6 +1931,7 @@ def run_rule_extraction_by_mcs(
                 "n_sample_actual": n_sample_actual,
                 "avg_len_surv": _avg_rule_len(rules_surv),
                 "avg_len_fail": _avg_rule_len(rules_fail),
+                "rss_gb": rss_gb,
             })
 
             if (n_round % save_every) == 0:
@@ -2001,6 +2004,7 @@ def run_rule_extraction_by_mcs(
             probs_updated = True
 
         # ---- metrics for this round ----
+        rss_gb = psutil.Process().memory_info().rss / (1024**3)
         dt = time.perf_counter() - t0
         metrics_log.append({
             "round": n_round,
@@ -2014,6 +2018,7 @@ def run_rule_extraction_by_mcs(
             "n_sample_actual": n_sample_actual,
             "avg_len_surv": _avg_rule_len(rules_surv),
             "avg_len_fail": _avg_rule_len(rules_fail),
+            "rss_gb": rss_gb,   
         })
 
         if (n_round % save_every) == 0:
@@ -2051,6 +2056,7 @@ def run_rule_extraction_by_mcs(
     print(f"[Final results] Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
 
     # Final metrics entry
+    rss_gb = psutil.Process().memory_info().rss / (1024**3)
     metrics_log.append({
         "round": n_round,
         "time_sec": 0.0,
@@ -2062,6 +2068,7 @@ def run_rule_extraction_by_mcs(
         "p_unknown": sp2["unknown"],
         "avg_len_surv": _avg_rule_len(rules_surv),
         "avg_len_fail": _avg_rule_len(rules_fail),
+        "rss_gb": rss_gb,   
     })
 
     return {

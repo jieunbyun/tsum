@@ -1183,7 +1183,7 @@ def def_five_comp():
 
 
 # ---------- Multi-state API test (returns state probabilities {0,1}) ----------
-def test_get_comp_cond_sys_prob_multi__two_state(def_five_comp):
+def test_get_comp_cond_sys_prob_multi_two_state(def_five_comp):
     failure_rules, survival_rules, probs, row_names, s_fun = def_five_comp
 
     # The multi-state function expects consecutive keys from 0..max_st in BOTH dicts.
