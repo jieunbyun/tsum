@@ -1953,20 +1953,22 @@ def run_rule_extraction_by_mcs(
         states = torch.argmax(sample0, dim=1).tolist()
         comps_st_test = {row_names[k]: int(states[k]) for k in range(n_vars)}  # exclude system var
 
-        fval, sys_st, min_comps_st = sfun(comps_st_test)
-        if min_comps_st is None:
-            if sys_st >= sys_surv_st:
-                if min_rule_search:
-                    min_comps_st, info = minimise_surv_states_random(comps_st_test, sfun, sys_surv_st=sys_surv_st, fval=fval)
-                    fval = info.get('final_sys_state', fval)
-                else:
-                    min_comps_st = get_min_surv_comps_st(comps_st_test, sys_surv_st=sys_surv_st)
+        fval, sys_st, min_comps_st0 = sfun(comps_st_test)
+        if min_comps_st0 is None: # if no reference state is provided, use the component state as a reference state
+            min_comps_st0 = comps_st_test.copy()
+
+        if sys_st >= sys_surv_st:
+            if min_rule_search:
+                min_comps_st, info = minimise_surv_states_random(min_comps_st0, sfun, sys_surv_st=sys_surv_st, fval=fval)
+                fval = info.get('final_sys_state', fval)
             else:
-                if min_rule_search:
-                    min_comps_st, info = minimise_fail_states_random(comps_st_test, sfun, max_state=n_state-1, sys_fail_st=sys_surv_st-1, fval=fval)
-                    fval = info.get('final_sys_state', fval)
-                else:
-                    min_comps_st = get_min_fail_comps_st(comps_st_test, max_st=n_state-1, sys_fail_st=sys_surv_st-1)
+                min_comps_st = get_min_surv_comps_st(min_comps_st0, sys_surv_st=sys_surv_st)
+        else:
+            if min_rule_search:
+                min_comps_st, info = minimise_fail_states_random(min_comps_st0, sfun, max_state=n_state-1, sys_fail_st=sys_surv_st-1, fval=fval)
+                fval = info.get('final_sys_state', fval)
+            else:
+                min_comps_st = get_min_fail_comps_st(min_comps_st0, max_st=n_state-1, sys_fail_st=sys_surv_st-1)
 
         if sys_st >= sys_surv_st:
             print("Survival sample found from sampling.")
