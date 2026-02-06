@@ -1956,6 +1956,9 @@ def run_rule_extraction_by_mcs(
         fval, sys_st, min_comps_st0 = sfun(comps_st_test)
         if min_comps_st0 is None: # if no reference state is provided, use the component state as a reference state
             min_comps_st0 = comps_st_test.copy()
+        elif isinstance(next(iter(min_comps_st0.values())), tuple): 
+            # if reference state is provided as ('>=' or '<=', int) for each component, take only the int state
+            min_comps_st0 = {k: v[1] for k, v in min_comps_st0.items()}
 
         if sys_st >= sys_surv_st:
             if min_rule_search:
