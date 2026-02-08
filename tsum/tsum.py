@@ -22,156 +22,43 @@ try:
     _NUMPY_NUM = (np.integer, np.floating)
 except Exception:
     _NUMPY_NUM = tuple()
-# -----
 
-def get_min_comps_st(comps_st, sys_st, max_state=0):
+
+def get_min_fail_comps_st(comps_st, max_st, sys_fail_st):
     """
     Get the minimal failing component states from a given state,
     by recording components in comps_st != max_st
 
     Args:
         comps_st (dict): {comp_name: state (int)}
-        sys_st (int): the system survial or failure state
-        max_st (int): the highest state for survival, only required for fail
+        max_st (int): the highest state
+        sys_fail_st (int): the system failure state
 
     Returns:
         (dict): {comp_name: ('comparison_operator', state (int))}
 
     """
-    if max_state: # get min failing component state
-        symbol = '<='
-        op_comp = operator.lt
-    else: # get min survival component state
-        symbol = '>='
-        op_comp = operator.gt
-
-    min_comps_st = {k: (symbol, v) for k, v in comps_st.items() if op_comp(v, max_state)}
-    min_comps_st['sys'] = (symbol, sys_st)
-
+    min_comps_st = {k: ('<=', v) for k, v in comps_st.items() if v < max_st}
+    min_comps_st['sys'] = ('<=', sys_fail_st)
     return min_comps_st
 
 
-def minimise_states_random(
-    comps_st: Dict[str, int],
-    sfun: Callable[[Dict[Any, int]], Tuple[Any, Tuple[str, int], Dict[Any, int]]],
-    sys_st: int,
-    max_state: int = 0,  # only required for fail state
-    *,
-    fval: Optional[Any] = None,
-    min_state: int = 0,
-    step: int = 1,
-    seed: Optional[int] = None,
-    exclude_keys: Iterable[str] = ("sys",)
-) -> Tuple[Dict[str, int], Dict[str, Any]]:
+def get_min_surv_comps_st(comps_st, sys_surv_st):
     """
-    Random greedy reduction of component states.
+    Get the minimal surviving component states from a given state,
+    by recording components in comps_st != max_st
 
-    Algorithm (given a random permutation of components):
-      - Try lowering each component by `step` (e.g., 1).
-      - Call sfun(modified_state).
-        Expect sfun to return a tuple where the 2nd element is int that represents a system state.
-      - If status >= sys_surv_st: keep the lowered value and continue cycling.
-        If the component reaches `min_state`, remove it (can't lower further).
-      - If status < sys_fail_st: revert the change and remove that component (no further attempts).
-
-    Stops when all components have been removed from the candidate pool.
+    Args:
+        comps_st (dict): {comp_name: state (int)}
+        sys_surv_st (int): the system survival state
 
     Returns:
-      final_state, info
-        - final_state: dict of the minimized states.
-        - info: {
-            'permutation': [...],
-            'removed_on_failure': [comp,...],
-            'hit_min_state': [comp,...],
-            'attempts': int,
-          }
+        (dict): {comp_name: ('comparison_operator', state (int))}
+
     """
-    if max_state: # fail 
-        op_comp = operator.lt
-        comp_val = max_state
-        op_state = operator.ge
-        op_prev = operator.add
-        op_status = operator.le
-        #sys_st = sys_fail_st
-        removed_key = 'survival'
-
-    else: # survival
-        op_comp = operator.gt
-        comp_val = min_state
-        op_state = operator.le
-        op_prev = operator.sub
-        op_status = operator.ge
-        #sys_st = sys_surv_st
-        removed_key = 'failure'
-
-    rng = random.Random(seed)
-
-    # Work on a (shallow) copy; do NOT mutate caller's dict (value int is immutable)
-    state = dict(comps_st)
-
-    # Build candidate component key deque from a random permutation
-    candidates = [k for k, v in state.items()
-                  if k not in set(exclude_keys) and isinstance(v, int) and op_comp(v, comp_val)]
-    rng.shuffle(candidates)
-    dq = deque(candidates)
-
-    removed = []
-    hit_min_state = []
-    attempts = 0
-
-    while dq:
-        comp = dq[0]
-
-        # If already at/below min_state, remove and continue
-        #if state.get(comp, min_state) <= min_state: # state[comp] always works
-        if op_state(state[comp], comp_val): # state[comp] always works
-            dq.popleft()
-            hit_min_state.append(comp)
-            continue
-
-        prev = state[comp]
-        fval_prev = fval
-        state[comp] = op_prev(prev, step)
-        attempts += 1
-
-        # Expect sfun to return (value, 's'/'f', info) or similar
-        try:
-            fval, status, _ = sfun(state)
-        except Exception as e:
-            # If your sfun has a different signature, surface the error clearly
-            state[comp] = prev  # revert
-            fval = fval_prev
-            dq.popleft()
-            removed.append(comp)
-            continue
-
-        if op_status(status, sys_st):
-            # Keep lowered value
-            if op_state(state[comp], comp_val):
-                dq.popleft()
-                hit_min_state.append(comp)
-            else:
-                dq.rotate(-1)  # move to back; try again later
-        else:
-            # Revert and remove from further consideration
-            state[comp] = prev
-            fval = fval_prev
-            dq.popleft()
-            removed.append(comp)
-
-    info = {
-        'permutation': candidates,
-        f'removed_on_{removed_key}': removed,
-        'hit_min_state': hit_min_state,
-        'attempts': attempts,
-        'final_state': state,
-        'final_sys_state': fval
-    }
-
-    min_rule = get_min_comps_st(state, sys_st, max_state)
-
-    return min_rule, info
-
+    min_comps_st = {k: ('>=', v) for k, v in comps_st.items() if v > 0}
+    min_comps_st['sys'] = ('>=', sys_surv_st)
+    return min_comps_st
 
 
 def minimise_surv_states_random(
@@ -276,6 +163,7 @@ def minimise_surv_states_random(
 
     return min_rule, info
 
+
 def minimise_fail_states_random(
     comps_st: Dict[str, int],
     sfun,
@@ -377,6 +265,7 @@ def minimise_fail_states_random(
     min_rule = get_min_fail_comps_st(state, max_state, sys_fail_st)
 
     return min_rule, info
+
 
 def from_rule_dict_to_mat(rule_dict, row_names, max_st):
     """
@@ -1308,7 +1197,7 @@ def update_rules(min_comps_st, rules_dict, rules_mat, row_names, verbose=False):
         if verbose:
             print("WARNING: New rule is a subset of existing rules. No update made.")
         return rules_dict, rules_mat
-    
+
     rules_mat = rules_mat[~are_Rset_subset,:,:]
     rules_dict = [r for r, keep in zip(rules_dict, ~are_Rset_subset) if keep]
 

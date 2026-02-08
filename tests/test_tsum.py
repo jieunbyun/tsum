@@ -15,8 +15,7 @@ def test_get_min_fail_comps_st1():
 
     comps_st = {'x1': 2, 'x2': 1, 'x3': 0, 'x4': 0} # Example state that leads to system failure
 
-    #min_comps_st = tsum.get_min_fail_comps_st(comps_st, 2, 0)
-    min_comps_st = tsum.get_min_comps_st(comps_st, 0, max_state=2)
+    min_comps_st = tsum.get_min_fail_comps_st(comps_st, 2, 0)
 
     assert min_comps_st == {'x2': ('<=', 1), 'x3': ('<=', 0), 'x4': ('<=', 0), 'sys': ('<=', 0)}, f"Expected {{'x2': ('<=', 1), 'x3': ('<=', 0), 'x4': ('<=', 0), 'sys': ('<=', 0)}}, got {min_comps_st}"
 
@@ -24,8 +23,7 @@ def test_get_min_fail_comps_st2():
 
     comps_st = {'x1': 2, 'x2': 0, 'x3': 2, 'x4': 2} # Example state that leads to system failure
 
-    min_comps_st = tsum.get_min_comps_st(comps_st, 0, max_state=2)
-    #min_comps_st = tsum.get_min_fail_comps_st(comps_st, 2, 0)
+    min_comps_st = tsum.get_min_fail_comps_st(comps_st, 2, 0)
 
     assert min_comps_st == {'x2': ('<=', 0), 'sys': ('<=', 0)}, f"Expected {{'x2': ('<=', 0), 'sys': ('<=', 0)}}, got {min_comps_st}"
 
@@ -33,8 +31,7 @@ def test_get_min_fail_comps_st3():
 
     comps_st = {'x1': 2, 'x2': 1, 'x3': 1, 'x4': 3} # Example state that leads to system failure
 
-    min_comps_st = tsum.get_min_comps_st(comps_st, 1, max_state=3)
-    #min_comps_st = tsum.get_min_fail_comps_st(comps_st, 3, 1)
+    min_comps_st = tsum.get_min_fail_comps_st(comps_st, 3, 1)
 
     assert min_comps_st == {'x1': ('<=', 2), 'x2': ('<=', 1), 'x3': ('<=', 1), 'sys': ('<=', 1)}, f"Expected {{'x1': ('<=', 2), 'x2': ('<=', 1), 'x3': ('<=', 1), 'sys': ('<=', 1)}}, got {min_comps_st}"
 
@@ -42,7 +39,7 @@ def test_get_min_surv_comps_st3():
 
     comps_st = {'x1': 2, 'x2': 1, 'x3': 1, 'x4': 3} # Example state that leads to system survival
 
-    min_comps_st = tsum.get_min_comps_st(comps_st, 1)
+    min_comps_st = tsum.get_min_surv_comps_st(comps_st, 1)
 
     assert min_comps_st == {'x1': ('>=', 2), 'x2': ('>=', 1), 'x3': ('>=', 1), 'x4': ('>=', 3),'sys': ('>=', 1)}, f"Expected {{'x1': ('>=', 2), 'x2': ('>=', 1), 'x3': ('>=', 1), 'x4': ('>=', 3),'sys': ('>=', 1)}}, got {min_comps_st}"
 
@@ -50,7 +47,7 @@ def test_get_min_surv_comps_st2():
 
     comps_st = {'x1': 2, 'x2': 0, 'x3': 2, 'x4': 2} # Example state that leads to system survival
 
-    min_comps_st = tsum.get_min_comps_st(comps_st, 1)
+    min_comps_st = tsum.get_min_surv_comps_st(comps_st, 1)
 
     assert min_comps_st == {'x1': ('>=', 2),'x3': ('>=', 2), 'x4': ('>=', 2), 'sys': ('>=', 1)}, f"Expected {{'x1': ('>=', 2),'x3': ('>=', 2),'x4': ('>=', 2), 'sys': ('>=', 1)}}, got {min_comps_st}"
 
@@ -1106,8 +1103,7 @@ def test_minimise_surv_states_random1(surv_fail_rules_ex_4comps):
                 return None, 1, None
         return None, 0, None
 
-    #new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, sys_surv_st=1)
-    new_rule, info = tsum.minimise_states_random(comps_st, sfun, sys_st=1)
+    new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, sys_surv_st=1)
 
     assert new_rule in surv_rules, f"Expected one of {surv_rules}, but got {new_rule}"
 
@@ -1123,8 +1119,7 @@ def test_minimise_surv_states_random2(surv_fail_rules_ex_4comps):
                 return None, 1, None
         return None, 0, None
 
-    #new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, sys_surv_st=1)
-    new_rule, info = tsum.minimise_states_random(comps_st, sfun, sys_st=1)
+    new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, sys_surv_st=1)
     assert new_rule in surv_rules, f"Expected one of {surv_rules}, but got {new_rule}"
 
 def test_minimise_fail_states_random1(surv_fail_rules_ex_4comps):
@@ -1138,8 +1133,7 @@ def test_minimise_fail_states_random1(surv_fail_rules_ex_4comps):
                 return None, 1, None
         return None, 0, None
 
-    #new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, sys_fail_st=0, max_state=2)
-    new_rule, info = tsum.minimise_states_random(comps_st, sfun, sys_st=0, max_state=2)
+    new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, sys_fail_st=0, max_state=2)
     assert new_rule in fail_rules, f"Got {new_rule}"
 
 def test_minimise_fail_states_random2(surv_fail_rules_ex_4comps):
@@ -1154,8 +1148,7 @@ def test_minimise_fail_states_random2(surv_fail_rules_ex_4comps):
                 return None, 1, None
         return None, 0, None
 
-    #new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, sys_fail_st=0, max_state=2)
-    new_rule, info = tsum.minimise_states_random(comps_st, sfun, sys_st=0, max_state=2)
+    new_rule, info = tsum.minimise_fail_states_random(comps_st, sfun, sys_fail_st=0, max_state=2)
     assert new_rule in fail_rules, f"Got {new_rule}"
 
 # ---------- Fixture: 5 components, binary states ----------
