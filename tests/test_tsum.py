@@ -1,10 +1,13 @@
 from pathlib import Path
-HOME = Path(__file__).absolute().parent
-
-from tsum import tsum
-from tsum import utils
 import pytest
 import torch
+
+from tsum import tsum
+#from tsum.utils import sys_fun_sum
+from tsum import utils
+
+
+HOME = Path(__file__).absolute().parent
 
 def test_get_min_fail_comps_st1():
 
