@@ -1788,6 +1788,7 @@ def run_rule_extraction_by_mcs(
     # Termination / threshold settings
     unk_prob_thres: float = 1e-2,
     unk_prob_opt: str = "rel", # "abs" or "rel"
+    max_rounds: int = 10000,     # hard cap on rounds to prevent infinite loops
     # Frequencies / sampling settings
     prob_update_every: int = 500,
     save_every: int = 10,
@@ -2034,6 +2035,10 @@ def run_rule_extraction_by_mcs(
             _save_json(rules_fail, rules_fail_path)
             _save_pt(rules_mat_surv, rules_surv_pt_path)
             _save_pt(rules_mat_fail, rules_fail_pt_path)
+
+        if n_round >= max_rounds:
+            print(f"Reached maximum rounds ({max_rounds}). Terminating.")
+            break
 
     # Final flush of any remaining metrics not yet written by save_every
     last_flushed_rounds = (n_round // save_every) * save_every
