@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from ndtools.network_generator import GenConfig, generate_and_save
 from ndtools.io import load_json
@@ -6,34 +7,76 @@ import networkx as nx
 from ndtools.fun_binary_graph import eval_1od_connectivity, eval_global_conn_k
 from mbnpy import brc
 import torch
+import numpy as np
+import gc
+
+import sys
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
 from tsum import tsum
 
 def generate_random_network_data(name: str = "rg", 
                                  generator = "rg",
                                  generator_params={"n_nodes": 60, "radius": 0.25, "p_fail": 0.1}, 
                                  target_g_conn = 1,
+                                 min_g_conn = 0, # Minimum global connectivity (k) required for the generated graph. Only used if find_connected_graph=True.
                                  out_base: Path = None,
-                                 seed: int = 7) -> Path:
+                                 seed: int = 7,
+                                 find_connected_graph: bool = True) -> Path:
     print(f"Generating random network data {name} with params: {generator_params} ..")
 
-    cfg = GenConfig(
-        name=name,
-        generator=generator,
-        description=", ".join(f"{k}={v}" for k, v in generator_params.items()),
-        generator_params=generator_params,
-        seed=seed,
-    )
+    if find_connected_graph: # Try multiple times with different seeds until we find a connected graph (or give up after max_tries)
+        max_tries = 100  # safety guard
 
-    ds_root = generate_and_save(out_base, cfg, draw_graph=True)
-    print("Wrote:", ds_root)
+        for i in range(max_tries):
+            seed_i = (seed + i) if seed is not None else None
+            print(f"Try {i+1}/{max_tries} with seed={seed_i} ...")
 
-    # Load generated data
-    nodes = load_json( ds_root / "data" / "nodes.json" )
-    edges = load_json( ds_root / "data" / "edges.json" )
-    probs = load_json( ds_root / "data" / "probs.json" )
+            cfg = GenConfig(
+                name=name,
+                generator=generator,
+                description=", ".join(f"{k}={v}" for k, v in generator_params.items()),
+                generator_params=generator_params,
+                seed=seed_i,
+            )
 
-    # Build a NetworkX graph
-    G = build_graph(nodes, edges, probs)
+            ds_root = generate_and_save(out_base, cfg, draw_graph=True)
+
+            nodes = load_json(ds_root / "data" / "nodes.json")
+            edges = load_json(ds_root / "data" / "edges.json")
+            probs = load_json(ds_root / "data" / "probs.json")
+
+            G = build_graph(nodes, edges, probs)
+
+            if G.number_of_nodes() > 0 and nx.is_connected(G):
+                
+                # Check if global connectivity meets the target
+                _, k, _ = eval_global_conn_k({x:1 for x in probs.keys()}, G)
+
+                if k >= min_g_conn:
+                    print(f"Found connected graph on try {i+1} (seed={seed_i}). Wrote: {ds_root}")
+                    break
+        else:
+            print(f"No connected graph found after {max_tries} tries.")
+            return None, None
+        
+    else: # Just generate once with the given seed (which may or may not yield a connected graph)
+        cfg = GenConfig(
+            name=name,
+            generator=generator,
+            description=", ".join(f"{k}={v}" for k, v in generator_params.items()),
+            generator_params=generator_params,
+            seed=seed,
+        )
+
+        ds_root = generate_and_save(out_base, cfg, draw_graph=True)
+
+        nodes = load_json(ds_root / "data" / "nodes.json")
+        edges = load_json(ds_root / "data" / "edges.json")
+        probs = load_json(ds_root / "data" / "probs.json")
+
+        G = build_graph(nodes, edges, probs)
+
     print(f"Graph has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
 
     # Decide the hub node (node with highest degree)
@@ -44,6 +87,17 @@ def generate_random_network_data(name: str = "rg",
     dist = nx.single_source_shortest_path_length(G, hub[0])
     dest = max(dist.items(), key=lambda x: x[1])
     print(f"Destination node is {dest[0]} at distance {dest[1]} from hub")
+
+    # Record hub and destination nodes
+    for n in nodes:
+        if n == hub[0]:
+            nodes[n]['is_od'] = True
+        elif n == dest[0]:
+            nodes[n]['is_od'] = True
+        else:
+            nodes[n]['is_od'] = False
+    with open(ds_root / "data" / "nodes.json", "w") as f:
+        json.dump(nodes, f, indent=4)
 
     # Build system function
     ## Connectivity of one origin-destination pair
@@ -80,9 +134,14 @@ def generate_random_network_data(name: str = "rg",
                 k, sys_st, _ = sys_func(comps_st)
                 return k, ('s' if sys_st == 1 else 'f'), None
             return f
-    
-    sys_func_conn_brc = brc_wrapper(sys_func_conn)
-    sys_func_global_conn_brc = brc_wrapper(sys_func_global_conn)
+
+    # System functions for TSUM (remove the minimum comps state, which provides little benefit in TSUM)
+    def tsum_wrapper(sys_func):
+        """Convert (k, sys_st (0/1), extra) -> (k, sys_st (0/1), None)."""
+        def f(comps_st):
+            k, sys_st, _ = sys_func(comps_st)
+            return k, sys_st, None
+        return f
     
     # Return random graph data
     rg_data = {
@@ -91,10 +150,10 @@ def generate_random_network_data(name: str = "rg",
         "probs": probs,
         "hub": hub[0],
         "dest": dest[0],
-        "sys_func_conn": sys_func_conn,
-        "sys_func_global_conn": sys_func_global_conn,
-        "sys_func_conn_brc": sys_func_conn_brc,
-        "sys_func_global_conn_brc": sys_func_global_conn_brc,
+        "sys_func_conn_brc": brc_wrapper(sys_func_conn),
+        "sys_func_global_conn_brc": brc_wrapper(sys_func_global_conn),
+        "sys_func_conn_tsum": tsum_wrapper(sys_func_conn),
+        "sys_func_global_conn_tsum": tsum_wrapper(sys_func_global_conn),
         "graph": G
     }
 
@@ -104,6 +163,7 @@ if __name__ == "__main__":
 
     repo_root = Path(__file__).resolve().parents[1]
     out_base = repo_root / "results"
+    brc_rss_max_gb = 20.0  # Max RSS for BRC in GB
 
     # Generate a random network 
     # smaller example
@@ -112,96 +172,205 @@ if __name__ == "__main__":
     gen_params1 = {"n_nodes": 60, "radius": 0.25, "p_fail": 0.05}
     target_g_conn1 = 1
     ds_root1, rg_data1 = generate_random_network_data(name, out_base=out_base, 
-                                                      generator=generator,
-                                                      generator_params=gen_params1, 
-                                                      target_g_conn=target_g_conn1,
-                                                      seed=7)
+                                                    generator=generator,
+                                                    generator_params=gen_params1, 
+                                                    target_g_conn=target_g_conn1,
+                                                    seed=7,
+                                                    find_connected_graph=False)
 
     # Larger example
     name = "rg2" # Random Geometric Graph
-    gen_params2 = {"n_nodes": 120, "radius": 0.25, "p_fail": 0.05}
-    target_g_conn2 = 2
+    gen_params2 = {"n_nodes": 120, "radius": 0.12, "p_fail": 0.05}
+    target_g_conn2 = 1
     ds_root2, rg_data2 = generate_random_network_data(name, out_base=out_base,
-                                                      generator=generator,
-                                                      generator_params=gen_params2, 
-                                                      target_g_conn=target_g_conn2,
-                                                      seed=7)
+                                                    generator=generator,
+                                                    generator_params=gen_params2, 
+                                                    target_g_conn=target_g_conn2,
+                                                    seed=7)
+    
+    # example in between (1)
+    name = "rg3" # Random Geometric Graph
+    gen_params3 = {"n_nodes": 80, "radius": 0.20, "p_fail": 0.05}
+    target_g_conn3 = 1
+    ds_root3, rg_data3 = generate_random_network_data(name, out_base=out_base,
+                                                    generator=generator,
+                                                    generator_params=gen_params3, 
+                                                    target_g_conn=target_g_conn3,
+                                                    seed=7)
+    
+    # example in between (2)
+    name = "rg4" # Random Geometric Graph
+    gen_params4 = {"n_nodes": 100, "radius": 0.16, "p_fail": 0.05}
+    target_g_conn4 = 1
+    ds_root4, rg_data4 = generate_random_network_data(name, out_base=out_base,
+                                                    generator=generator,
+                                                    generator_params=gen_params4, 
+                                                    target_g_conn=target_g_conn4,
+                                                    min_g_conn=2,
+                                                    seed=7)
 
     # Run BRC algorithm on the generated data
-    edges1 = rg_data1['edges']
-    probs1 = rg_data1['probs']
-    probs_brc1 = {e: {0: probs1[e]['0']['p'], 1: probs1[e]['1']['p']} for e in edges1}
+    """edges1 = rg_data1['edges']
+    probs1 = rg_data1['probs']"""
+    
+    """probs_brc1 = {e: {0: probs1[e]['0']['p'], 1: probs1[e]['1']['p']} for e in edges1}
     brs1, rules1, sys_res1, monitor1 = brc.run(probs_brc1, rg_data1['sys_func_conn_brc'], 
-                                               max_nb = 40_000)
+                                               max_rules=np.inf,
+                                               max_memory_gb=brc_rss_max_gb)
     brc_path1 = Path(ds_root1 / "brc")
     brc_path1_rel = brc_path1.relative_to(Path.cwd())
     brc.save_brc_data(rules1, brs1, sys_res1, monitor1, output_folder = str(brc_path1_rel), fname_suffix='conn')
+    
+    del brs1, rules1, sys_res1, monitor1 # to not interfere with memory measurement of the next runs
+    gc.collect()
+    """
 
+    """
     edges2 = rg_data2['edges']
     probs2 = rg_data2['probs']
     probs_brc2 = {e: {0: probs2[e]['0']['p'], 1: probs2[e]['1']['p']} for e in edges2}
+    
     brs2, rules2, sys_res2, monitor2 = brc.run(probs_brc2, rg_data2['sys_func_conn_brc'], 
-                                               max_nb = 40_000)
+                                               max_rules=np.inf,
+                                               max_memory_gb=brc_rss_max_gb)
     brc_path2 = Path(ds_root2 / "brc")
     brc_path2_rel = brc_path2.relative_to(Path.cwd())
     brc.save_brc_data(rules2, brs2, sys_res2, monitor2, output_folder = str(brc_path2_rel), fname_suffix='conn')
 
+    del brs2, rules2, sys_res2, monitor2 # to not interfere with memory measurement of the next runs
+    gc.collect()
+    """
+
+
     # Run TSUM
     ## First example - 1OD connectivity
-    row_names = list(edges1.keys()) 
+    """row_names = list(edges1.keys()) 
     n_state = 2  # binary states: 0, 1
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     probs = [[rg_data1['probs'][n]['0']['p'], rg_data1['probs'][n]['1']['p']] for n in row_names]
-    probs = torch.tensor(probs, dtype=torch.float32, device=device)
+    probs = torch.tensor(probs, dtype=torch.float32, device=device)"""
 
-    result1_conn = tsum.run_rule_extraction_by_mcs(
+    """
+    _ = tsum.run_rule_extraction_by_mcs(
         # Problem-specific callables / data
-        sfun=rg_data1['sys_func_conn'],
+        sfun=rg_data1['sys_func_conn_tsum'],
         probs=probs,
         row_names=row_names,
         n_state=n_state,
         sys_surv_st=1,
-        unk_prob_thres = 1e-2,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
         output_dir=ds_root1 / "tsum_conn",
-    ) 
+    )
+    """
     
     ## First example - Global connectivity
-    result1_conn = tsum.run_rule_extraction_by_mcs(
+    """_ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next runs
         # Problem-specific callables / data
-        sfun=rg_data1['sys_func_global_conn'],
+        sfun=rg_data1['sys_func_global_conn_tsum'],
         probs=probs,
         row_names=row_names,
         n_state=n_state,
         sys_surv_st=1,
-        unk_prob_thres = 1e-2,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
         output_dir=ds_root1 / "tsum_global_conn",
-    ) 
+    )"""
 
     ## Second example - 1OD connectivity
-    row_names = list(edges2.keys())
+    """row_names = list(edges2.keys())
     n_state = 2  # binary states: 0, 1
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     probs = [[rg_data2['probs'][n]['0']['p'], rg_data2['probs'][n]['1']['p']] for n in row_names]
     probs = torch.tensor(probs, dtype=torch.float32, device=device)
-    result2_conn = tsum.run_rule_extraction_by_mcs(
+    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
         # Problem-specific callables / data
-        sfun=rg_data2['sys_func_conn'],
+        sfun=rg_data2['sys_func_conn_tsum'],
         probs=probs,
         row_names=row_names,
         n_state=n_state,
         sys_surv_st=1,
-        unk_prob_thres = 1e-2,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
         output_dir=ds_root2 / "tsum_conn",
     )
 
     ## Second example - Global connectivity
-    result2_conn = tsum.run_rule_extraction_by_mcs(
+    _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
         # Problem-specific callables / data
-        sfun=rg_data2['sys_func_global_conn'],
+        sfun=rg_data2['sys_func_global_conn_tsum'],
         probs=probs,
         row_names=row_names,
         n_state=n_state,
         sys_surv_st=1,
-        unk_prob_thres = 1e-2,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
         output_dir=ds_root2 / "tsum_global_conn",
+    )"""
+
+    ## Third example - 1OD connectivity
+    """edges3 = rg_data3['edges']
+
+    row_names = list(edges3.keys())
+    n_state = 2  # binary states: 0, 1
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    probs = [[rg_data3['probs'][n]['0']['p'], rg_data3['probs'][n]['1']['p']] for n in row_names]
+    probs = torch.tensor(probs, dtype=torch.float32, device=device)
+    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
+        # Problem-specific callables / data
+        sfun=rg_data3['sys_func_conn_tsum'],
+        probs=probs,
+        row_names=row_names,
+        n_state=n_state,
+        sys_surv_st=1,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
+        output_dir=ds_root3 / "tsum_conn",
     )
+
+    ## Third example - Global connectivity
+    _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
+        # Problem-specific callables / data
+        sfun=rg_data3['sys_func_global_conn_tsum'],
+        probs=probs,
+        row_names=row_names,
+        n_state=n_state,
+        sys_surv_st=1,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
+        output_dir=ds_root3 / "tsum_global_conn",
+    )"""
+
+
+    ## Fourth example - 1OD connectivity
+    """edges4 = rg_data4['edges']
+
+    row_names = list(edges4.keys())
+    n_state = 2  # binary states: 0, 1
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    probs = [[rg_data4['probs'][n]['0']['p'], rg_data4['probs'][n]['1']['p']] for n in row_names]
+    probs = torch.tensor(probs, dtype=torch.float32, device=device)
+    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
+        # Problem-specific callables / data
+        sfun=rg_data4['sys_func_conn_tsum'],
+        probs=probs,
+        row_names=row_names,
+        n_state=n_state,
+        sys_surv_st=1,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
+        output_dir=ds_root4 / "tsum_conn",
+    )
+
+    ## Fourth example - Global connectivity
+    _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
+        # Problem-specific callables / data
+        sfun=rg_data4['sys_func_global_conn_tsum'],
+        probs=probs,
+        row_names=row_names,
+        n_state=n_state,
+        sys_surv_st=1,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
+        output_dir=ds_root4 / "tsum_global_conn",
+    )"""
