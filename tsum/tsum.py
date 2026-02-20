@@ -1574,7 +1574,7 @@ def get_comp_cond_sys_prob(
     probs: Tensor,
     comps_st_cond: Dict[str, int],
     row_names: Sequence[str],
-    s_fun,                          # Callable[[Dict[str,int]], tuple]
+    s_fun: callable = None,                          # Callable[[Dict[str,int]], tuple]
     sys_surv_st: int = 1,        # system state value indicating survival
     n_sample: int = 1_000_000,
     n_batch:  int = 1_000_000
@@ -1625,24 +1625,27 @@ def get_comp_cond_sys_prob(
         counts["survival"] += int(res["survival"])
         counts["failure"]  += int(res["failure"])
 
-        # Resolve unknowns with s_fun
         idx_unknown = res["idx_unknown"]
         if idx_unknown.numel() > 0:
+            if s_fun is not None:
+                # Resolve unknowns with s_fun
+                for j in idx_unknown.tolist():
+                    sample_j = samples[j]  # (n_var, n_state)
+                    # convert one-hot row -> state index per var
+                    states = torch.argmax(sample_j, dim=1).tolist()
 
-            for j in idx_unknown.tolist():
-                sample_j = samples[j]  # (n_var, n_state)
-                # convert one-hot row -> state index per var
-                states = torch.argmax(sample_j, dim=1).tolist()
+                    # build comps dict for s_fun
+                    comps = {row_names[k]: int(states[k]) for k in range(n_comps)}
 
-                # build comps dict for s_fun
-                comps = {row_names[k]: int(states[k]) for k in range(n_comps)}
+                    _, sys_st, _ = s_fun(comps)
 
-                _, sys_st, _ = s_fun(comps)
+                    if sys_st >= sys_surv_st:
+                        counts["survival"] += 1
+                    else:
+                        counts["failure"] += 1
 
-                if sys_st >= sys_surv_st:
-                    counts["survival"] += 1
-                else:
-                    counts["failure"] += 1
+            else:
+                counts["unknown"] += int(idx_unknown.shape[0])
 
         remaining -= b
 
@@ -1657,7 +1660,7 @@ def get_comp_cond_sys_prob_multi(
     probs: Tensor,
     comps_st_cond: Dict[str, int],
     row_names: Sequence[str],
-    s_fun,                          # Callable[[Dict[str,int]], tuple]
+    s_fun: callable = None,                          # Callable[[Dict[str,int]], tuple]
     n_sample: int = 1_000_000,
     n_batch:  int = 1_000_000
 ) -> Dict[str, float]:

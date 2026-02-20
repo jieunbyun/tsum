@@ -3,8 +3,8 @@ from pathlib import Path
 from ndtools.network_generator import GenConfig, generate_and_save
 from ndtools.io import load_json
 from ndtools.graphs import build_graph
-import networkx as nx
 from ndtools.fun_binary_graph import eval_1od_connectivity, eval_global_conn_k
+import networkx as nx
 from mbnpy import brc
 import torch
 import numpy as np
@@ -243,10 +243,10 @@ if __name__ == "__main__":
 
 
     # Run TSUM
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     ## First example - 1OD connectivity
     """row_names = list(edges1.keys()) 
     n_state = 2  # binary states: 0, 1
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     probs = [[rg_data1['probs'][n]['0']['p'], rg_data1['probs'][n]['1']['p']] for n in row_names]
     probs = torch.tensor(probs, dtype=torch.float32, device=device)"""
 
@@ -343,14 +343,14 @@ if __name__ == "__main__":
 
 
     ## Fourth example - 1OD connectivity
-    """edges4 = rg_data4['edges']
+    edges4 = rg_data4['edges']
 
     row_names = list(edges4.keys())
     n_state = 2  # binary states: 0, 1
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     probs = [[rg_data4['probs'][n]['0']['p'], rg_data4['probs'][n]['1']['p']] for n in row_names]
     probs = torch.tensor(probs, dtype=torch.float32, device=device)
-    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
+    """_ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
         # Problem-specific callables / data
         sfun=rg_data4['sys_func_conn_tsum'],
         probs=probs,
@@ -360,7 +360,7 @@ if __name__ == "__main__":
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
         output_dir=ds_root4 / "tsum_conn",
-    )
+    )"""
 
     ## Fourth example - Global connectivity
     _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
@@ -373,4 +373,5 @@ if __name__ == "__main__":
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
         output_dir=ds_root4 / "tsum_global_conn",
-    )"""
+        save_every=10000,
+    )
