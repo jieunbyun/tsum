@@ -503,6 +503,7 @@ def get_boundary_branches(tensor: torch.Tensor) -> torch.Tensor:
     return out if not squeeze_back else out.view(2, n_vars, n_state)
 
 
+# FIXME: unused
 def get_boundary_rules(tensor):
     n_br, n_vars, n_state = tensor.shape
     #n_comps = n_vars - 1 # exclude system event (last row) <- OUTDATED: system row is now excluded from input
@@ -542,6 +543,7 @@ def get_boundary_rules(tensor):
 
     return torch.cat([B_upper, B_lower], dim=0)  # shape: (2*n_br, n_vars, n_state)
 
+# FIXME: ununsed
 def is_intersect(events1, events2):
     """
     Determine whether each event in events1 intersects with any event in events2.
@@ -680,6 +682,7 @@ def find_first_nonempty_combination(Rcs, batch_size=65536, verbose=False):
     return None
 
 
+# FIXME: unused
 def sum_sorted_tuples_limited(max_vals):
     """
     Generate all tuples of non-negative integers with len=max_vals,
@@ -704,6 +707,7 @@ def sum_sorted_tuples_limited(max_vals):
             break  # no more combinations possible
         sum_level += 1
 
+# FIXME: unused
 def merge_branches(B):
     "Use hashing for computational efficiency"
 
@@ -719,6 +723,7 @@ def merge_branches(B):
 
     return B
 
+# FIXME: unused
 def merge_branches_old(B, batch_size=100_000):
     device = B.device
     dtype = B.dtype
@@ -1807,7 +1812,7 @@ def run_rule_extraction_by_mcs(
     fail_json_name: str = None,
     surv_pt_name: str = None,
     fail_pt_name: str = None,
-    metrics_path: str = "metrics.jsonl",
+    metrics_path: str = "metrics.json",
 ) -> Dict[str, Any]:
 
     os.makedirs(output_dir, exist_ok=True)

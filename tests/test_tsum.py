@@ -513,7 +513,6 @@ def test_from_Bbound_to_comps_st1():
 
     result = tsum.from_Bbound_to_comps_st(B, row_names)
     assert result == expected, f"Expected {expected}, but got {result}"
-    print("Test passed.")
 
 def test_is_subset1():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -532,11 +531,10 @@ def test_is_subset1():
 
     assert is_mat_subset == False
     assert torch.equal(is_tensor_subset, torch.tensor([False, False], device=device))
-    print("test_is_subset1 passed.")
 
 def test_is_subset2():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+
     Rnew = torch.tensor(
         [[0,1,1],[0,1,1],[0,0,1],[1,1,1]],
         dtype=torch.int32, device=device
@@ -551,7 +549,6 @@ def test_is_subset2():
 
     assert is_mat_subset == True
     assert torch.equal(is_tensor_subset, torch.tensor([True, False], device=device))
-    print("test_is_subset2 passed.")
 
 def test_find_first_nonempty_combination1():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -562,7 +559,7 @@ def test_find_first_nonempty_combination1():
     ], dtype=torch.int32, device=device)
 
     Rcs = []
-    for i in range(R.shape[0]): 
+    for i in range(R.shape[0]):
         Ri = R[i,:,:]
         Ri_c = tsum.get_complementary_events(Ri)
         Rcs.append(Ri_c)
