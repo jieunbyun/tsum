@@ -23,23 +23,18 @@ app = typer.Typer()
 
 
 def s_fun(comps_st):
-    travel_time, sys_st, info = fbg.eval_travel_time_to_nearest(
-            comps_st, G_base, origin, dests,
-            avg_speed=60, # km/h
-            #target_max = 0.5, # hours: it shouldn't take longer than this compared to the original travel time
-            target_max = [0.5, 0.25], # hours: it shouldn't take longer than this compared to the original travel time
-            length_attr = 'length_km')
+    conn_pop_ratio, sys_st, info = fbg.eval_population_accessibility(
+		comps_st,
+		G_base,
+		dests,
+        avg_speed=60.0, # km/h
+        target_time_max = 0.25, # hours: it shouldn't take longer than this to reach any destination
+        target_pop_max = [0.95, 0.99], # fraction of population that should be reachable at each destination
+        length_attr = 'length_km',
+        population_attr = 'population',)
 
-    if sys_st >= sys_surv_st:
-       path = info['path_filtered_edges']
-       min_comps_st = {eid: ('>=', 1) for eid in path} # edges in the path are working
-       min_comps_st['sys'] = ('>=', sys_st) # system edge is also working
-
-    else:
-        min_comps_st = None
-
-    return travel_time, sys_st, min_comps_st
-
+    min_comps_st = None
+    return conn_pop_ratio, sys_st, min_comps_st
 
 
 @app.command()
@@ -48,8 +43,8 @@ def check_system():
     prerequites()
 
     comps_st = {eid: 1 for eid in edges.keys()}
-    travel_time, sys_st, info = s_fun(comps_st)
-    print(f"travel_time: {travel_time}, sys_st: {sys_st}, info: {info}")
+    conn_pop_ratio, sys_st, details = s_fun(comps_st)
+    print(f"conn_pop_ratio: {conn_pop_ratio}, sys_st: {sys_st}, details: {details}")
 
 
 def prerequites():
@@ -60,12 +55,10 @@ def prerequites():
 
     nodes = json.loads((DATASET / "nodes.json").read_text(encoding="utf-8"))
     edges = json.loads((DATASET / "edges.json").read_text(encoding="utf-8"))
-    probs_dict = json.loads((DATASET / "probs_bin.json").read_text(encoding="utf-8"))
+    probs_dict = json.loads((DATASET / "probs_eq.json").read_text(encoding="utf-8"))
 
     G_base = build_graph(nodes, edges, probs_dict)
 
-    #origin = 'n1'
-    origin = 'n52'
     dests = ['n22', 'n66']
     sys_surv_st = 2
 
@@ -88,11 +81,10 @@ def find_rules():
         probs=probs,
         row_names=edge_names,
         n_state=n_state,
-        sys_surv_st=sys_surv_st,
         output_dir="tsum_res",
-        surv_json_name="rules_surv.json",
-        fail_json_name="rules_fail.json",
-        unk_prob_thres = 5e-3
+        unk_prob_thres = 1e-3,
+        unk_prob_opt = 'abs',
+        sys_surv_st=sys_surv_st,
     )
 
 
