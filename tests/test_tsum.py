@@ -1,10 +1,15 @@
 from pathlib import Path
-HOME = Path(__file__).absolute().parent
-
-from tsum import tsum
-from tsum import utils
 import pytest
 import torch
+import pdb
+
+
+from tsum import tsum
+#from tsum.utils import sys_fun_sum
+from tsum import utils
+
+
+HOME = Path(__file__).absolute().parent
 
 def test_get_min_fail_comps_st1():
 
@@ -29,6 +34,23 @@ def test_get_min_fail_comps_st3():
     min_comps_st = tsum.get_min_fail_comps_st(comps_st, 3, 1)
 
     assert min_comps_st == {'x1': ('<=', 2), 'x2': ('<=', 1), 'x3': ('<=', 1), 'sys': ('<=', 1)}, f"Expected {{'x1': ('<=', 2), 'x2': ('<=', 1), 'x3': ('<=', 1), 'sys': ('<=', 1)}}, got {min_comps_st}"
+
+def test_get_min_surv_comps_st3():
+
+    comps_st = {'x1': 2, 'x2': 1, 'x3': 1, 'x4': 3} # Example state that leads to system survival
+
+    min_comps_st = tsum.get_min_surv_comps_st(comps_st, 1)
+
+    assert min_comps_st == {'x1': ('>=', 2), 'x2': ('>=', 1), 'x3': ('>=', 1), 'x4': ('>=', 3),'sys': ('>=', 1)}, f"Expected {{'x1': ('>=', 2), 'x2': ('>=', 1), 'x3': ('>=', 1), 'x4': ('>=', 3),'sys': ('>=', 1)}}, got {min_comps_st}"
+
+def test_get_min_surv_comps_st2():
+
+    comps_st = {'x1': 2, 'x2': 0, 'x3': 2, 'x4': 2} # Example state that leads to system survival
+
+    min_comps_st = tsum.get_min_surv_comps_st(comps_st, 1)
+
+    assert min_comps_st == {'x1': ('>=', 2),'x3': ('>=', 2), 'x4': ('>=', 2), 'sys': ('>=', 1)}, f"Expected {{'x1': ('>=', 2),'x3': ('>=', 2),'x4': ('>=', 2), 'sys': ('>=', 1)}}, got {min_comps_st}"
+
 
 def test_from_rule_dict_to_mat1():
     rule = {'x1': ('>=', 2), 'x2': ('>=', 2), 'sys': ('>=', 1)}
@@ -491,7 +513,6 @@ def test_from_Bbound_to_comps_st1():
 
     result = tsum.from_Bbound_to_comps_st(B, row_names)
     assert result == expected, f"Expected {expected}, but got {result}"
-    print("Test passed.")
 
 def test_is_subset1():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -510,11 +531,10 @@ def test_is_subset1():
 
     assert is_mat_subset == False
     assert torch.equal(is_tensor_subset, torch.tensor([False, False], device=device))
-    print("test_is_subset1 passed.")
 
 def test_is_subset2():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+
     Rnew = torch.tensor(
         [[0,1,1],[0,1,1],[0,0,1],[1,1,1]],
         dtype=torch.int32, device=device
@@ -529,7 +549,6 @@ def test_is_subset2():
 
     assert is_mat_subset == True
     assert torch.equal(is_tensor_subset, torch.tensor([True, False], device=device))
-    print("test_is_subset2 passed.")
 
 def test_find_first_nonempty_combination1():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -540,7 +559,7 @@ def test_find_first_nonempty_combination1():
     ], dtype=torch.int32, device=device)
 
     Rcs = []
-    for i in range(R.shape[0]): 
+    for i in range(R.shape[0]):
         Ri = R[i,:,:]
         Ri_c = tsum.get_complementary_events(Ri)
         Rcs.append(Ri_c)
@@ -1075,12 +1094,14 @@ def test_minimise_surv_states_random1(surv_fail_rules_ex_4comps):
     comps_st = {x: 2 for x in row_names}
 
     def sfun(comps_st):
+        # return value, system_status, info
         for s in surv_rules:
             if all(comps_st[k] >= v[1] for k, v in s.items() if k in comps_st):
                 return None, 1, None
         return None, 0, None
 
     new_rule, info = tsum.minimise_surv_states_random(comps_st, sfun, sys_surv_st=1)
+
     assert new_rule in surv_rules, f"Expected one of {surv_rules}, but got {new_rule}"
 
 def test_minimise_surv_states_random2(surv_fail_rules_ex_4comps):

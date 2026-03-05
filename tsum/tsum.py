@@ -1,5 +1,6 @@
 import torch
 import itertools
+import operator
 from itertools import product, combinations
 from math import prod
 import math
@@ -21,7 +22,6 @@ try:
     _NUMPY_NUM = (np.integer, np.floating)
 except Exception:
     _NUMPY_NUM = tuple()
-# -----
 
 
 def get_min_fail_comps_st(comps_st, max_st, sys_fail_st):
@@ -42,6 +42,7 @@ def get_min_fail_comps_st(comps_st, max_st, sys_fail_st):
     min_comps_st['sys'] = ('<=', sys_fail_st)
     return min_comps_st
 
+
 def get_min_surv_comps_st(comps_st, sys_surv_st):
     """
     Get the minimal surviving component states from a given state,
@@ -58,6 +59,7 @@ def get_min_surv_comps_st(comps_st, sys_surv_st):
     min_comps_st = {k: ('>=', v) for k, v in comps_st.items() if v > 0}
     min_comps_st['sys'] = ('>=', sys_surv_st)
     return min_comps_st
+
 
 def minimise_surv_states_random(
     comps_st: Dict[str, int],
@@ -95,10 +97,10 @@ def minimise_surv_states_random(
     """
     rng = random.Random(seed)
 
-    # Work on a copy; do NOT mutate caller's dict
+    # Work on a (shallow) copy; do NOT mutate caller's dict (value int is immutable)
     state = dict(comps_st)
 
-    # Build candidate deque from a random permutation
+    # Build candidate component key deque from a random permutation
     candidates = [k for k, v in state.items()
                   if k not in set(exclude_keys) and isinstance(v, int) and v > min_state]
     rng.shuffle(candidates)
@@ -112,7 +114,8 @@ def minimise_surv_states_random(
         comp = dq[0]
 
         # If already at/below min_state, remove and continue
-        if state.get(comp, min_state) <= min_state:
+        #if state.get(comp, min_state) <= min_state: # state[comp] always works
+        if state[comp] <= min_state: # state[comp] always works
             dq.popleft()
             hit_min_state.append(comp)
             continue
@@ -159,6 +162,7 @@ def minimise_surv_states_random(
     min_rule = get_min_surv_comps_st(state, sys_surv_st)
 
     return min_rule, info
+
 
 def minimise_fail_states_random(
     comps_st: Dict[str, int],
@@ -261,6 +265,7 @@ def minimise_fail_states_random(
     min_rule = get_min_fail_comps_st(state, max_state, sys_fail_st)
 
     return min_rule, info
+
 
 def from_rule_dict_to_mat(rule_dict, row_names, max_st):
     """
@@ -498,6 +503,7 @@ def get_boundary_branches(tensor: torch.Tensor) -> torch.Tensor:
     return out if not squeeze_back else out.view(2, n_vars, n_state)
 
 
+# FIXME: unused
 def get_boundary_rules(tensor):
     n_br, n_vars, n_state = tensor.shape
     #n_comps = n_vars - 1 # exclude system event (last row) <- OUTDATED: system row is now excluded from input
@@ -537,6 +543,7 @@ def get_boundary_rules(tensor):
 
     return torch.cat([B_upper, B_lower], dim=0)  # shape: (2*n_br, n_vars, n_state)
 
+# FIXME: ununsed
 def is_intersect(events1, events2):
     """
     Determine whether each event in events1 intersects with any event in events2.
@@ -675,6 +682,7 @@ def find_first_nonempty_combination(Rcs, batch_size=65536, verbose=False):
     return None
 
 
+# FIXME: unused
 def sum_sorted_tuples_limited(max_vals):
     """
     Generate all tuples of non-negative integers with len=max_vals,
@@ -699,6 +707,7 @@ def sum_sorted_tuples_limited(max_vals):
             break  # no more combinations possible
         sum_level += 1
 
+# FIXME: unused
 def merge_branches(B):
     "Use hashing for computational efficiency"
 
@@ -714,6 +723,7 @@ def merge_branches(B):
 
     return B
 
+# FIXME: unused
 def merge_branches_old(B, batch_size=100_000):
     device = B.device
     dtype = B.dtype
@@ -1192,7 +1202,7 @@ def update_rules(min_comps_st, rules_dict, rules_mat, row_names, verbose=False):
         if verbose:
             print("WARNING: New rule is a subset of existing rules. No update made.")
         return rules_dict, rules_mat
-    
+
     rules_mat = rules_mat[~are_Rset_subset,:,:]
     rules_dict = [r for r, keep in zip(rules_dict, ~are_Rset_subset) if keep]
 
@@ -1215,7 +1225,7 @@ def run_rule_extraction(
     rules_mat_surv: Tensor = None,
     rules_mat_fail: Tensor = None,
     # Analysis parameters
-    stochastic_search: bool = True, 
+    stochastic_search: bool = True,
     gamma: float = 0.5, # if stochastic_search==False, ignored. 0 < γ < 1 → more emphasis on exploration; γ > 1 → more emphasis on exploitation
     # Termination / threshold settings
     unk_prob_thres: float = 5e-2,
@@ -1258,12 +1268,9 @@ def run_rule_extraction(
                 return 0.0
             # If it's a list-like of rules:
             if hasattr(rule_store, "__len__") and len(rule_store) > 0:
-                total = 0
-                count = 0
-                for r in rule_store:
-                    total += len(r) - 1
-                    count += 1
-                return float(total) / count if count else 0.0
+                total = sum([len(r) - 1 for r in rule_store])
+                count = len(rule_store)
+                return float(total) / count
         except Exception:
             pass
         return 0.0
@@ -1805,7 +1812,7 @@ def run_rule_extraction_by_mcs(
     fail_json_name: str = None,
     surv_pt_name: str = None,
     fail_pt_name: str = None,
-    metrics_path: str = "metrics.jsonl",
+    metrics_path: str = "metrics.json",
 ) -> Dict[str, Any]:
 
     os.makedirs(output_dir, exist_ok=True)
