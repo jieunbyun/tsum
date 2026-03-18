@@ -210,8 +210,8 @@ if __name__ == "__main__":
                                                     seed=7)
 
     # Run BRC algorithm on the generated data
-    """edges1 = rg_data1['edges']
-    probs1 = rg_data1['probs']"""
+    edges1 = rg_data1['edges']
+    probs1 = rg_data1['probs']
     
     """probs_brc1 = {e: {0: probs1[e]['0']['p'], 1: probs1[e]['1']['p']} for e in edges1}
     brs1, rules1, sys_res1, monitor1 = brc.run(probs_brc1, rg_data1['sys_func_conn_brc'], 
@@ -225,10 +225,10 @@ if __name__ == "__main__":
     gc.collect()
     """
 
-    """
+    
     edges2 = rg_data2['edges']
     probs2 = rg_data2['probs']
-    probs_brc2 = {e: {0: probs2[e]['0']['p'], 1: probs2[e]['1']['p']} for e in edges2}
+    """probs_brc2 = {e: {0: probs2[e]['0']['p'], 1: probs2[e]['1']['p']} for e in edges2}
     
     brs2, rules2, sys_res2, monitor2 = brc.run(probs_brc2, rg_data2['sys_func_conn_brc'], 
                                                max_rules=np.inf,
@@ -245,10 +245,10 @@ if __name__ == "__main__":
     # Run TSUM
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     ## First example - 1OD connectivity
-    """row_names = list(edges1.keys()) 
+    row_names = list(edges1.keys()) 
     n_state = 2  # binary states: 0, 1
     probs = [[rg_data1['probs'][n]['0']['p'], rg_data1['probs'][n]['1']['p']] for n in row_names]
-    probs = torch.tensor(probs, dtype=torch.float32, device=device)"""
+    probs = torch.tensor(probs, dtype=torch.float32, device=device)
 
     """
     _ = tsum.run_rule_extraction_by_mcs(
@@ -277,13 +277,41 @@ if __name__ == "__main__":
         output_dir=ds_root1 / "tsum_global_conn",
     )"""
 
+    ## First example - 1OD connectivity solved by TSUM without boundary reference search
+    _ = tsum.run_rule_extraction_by_mcs(
+        # Problem-specific callables / data
+        sfun=rg_data1['sys_func_conn_tsum'],
+        probs=probs,
+        row_names=row_names,
+        n_state=n_state,
+        sys_surv_st=1,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
+        output_dir=ds_root1 / "tsum_conn_no_min_rule",
+        min_rule_search = False
+    )
+
+    ## First example - Global connectivity solved by TSUM without boundary reference search
+    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next runs
+        # Problem-specific callables / data
+        sfun=rg_data1['sys_func_global_conn_tsum'],
+        probs=probs,
+        row_names=row_names,
+        n_state=n_state,
+        sys_surv_st=1,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
+        output_dir=ds_root1 / "tsum_global_conn_no_min_rule",
+        min_rule_search = False
+    )
+
     ## Second example - 1OD connectivity
-    """row_names = list(edges2.keys())
+    row_names = list(edges2.keys())
     n_state = 2  # binary states: 0, 1
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     probs = [[rg_data2['probs'][n]['0']['p'], rg_data2['probs'][n]['1']['p']] for n in row_names]
     probs = torch.tensor(probs, dtype=torch.float32, device=device)
-    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
+    """_ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
         # Problem-specific callables / data
         sfun=rg_data2['sys_func_conn_tsum'],
         probs=probs,
@@ -308,6 +336,34 @@ if __name__ == "__main__":
         output_dir=ds_root2 / "tsum_global_conn",
     )"""
 
+    ## Second example - 1OD connectivity solved by TSUM without boundary reference search
+    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
+        # Problem-specific callables / data
+        sfun=rg_data2['sys_func_conn_tsum'],
+        probs=probs,
+        row_names=row_names,
+        n_state=n_state,
+        sys_surv_st=1,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
+        output_dir=ds_root2 / "tsum_conn_no_min_rule",
+        min_rule_search = False
+    )
+
+    ## Second example - Global connectivity solved by TSUM without boundary reference search
+    _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
+        # Problem-specific callables / data
+        sfun=rg_data2['sys_func_global_conn_tsum'],
+        probs=probs,
+        row_names=row_names,
+        n_state=n_state,
+        sys_surv_st=1,
+        unk_prob_thres = 1e-5,
+        unk_prob_opt = 'abs',
+        output_dir=ds_root2 / "tsum_global_no_min_rule",
+        min_rule_search = False
+    )
+
     ## Third example - 1OD connectivity
     """edges3 = rg_data3['edges']
 
@@ -315,8 +371,9 @@ if __name__ == "__main__":
     n_state = 2  # binary states: 0, 1
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     probs = [[rg_data3['probs'][n]['0']['p'], rg_data3['probs'][n]['1']['p']] for n in row_names]
-    probs = torch.tensor(probs, dtype=torch.float32, device=device)
-    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
+    probs = torch.tensor(probs, dtype=torch.float32, device=device)"""
+
+    """_ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
         # Problem-specific callables / data
         sfun=rg_data3['sys_func_conn_tsum'],
         probs=probs,
@@ -343,13 +400,14 @@ if __name__ == "__main__":
 
 
     ## Fourth example - 1OD connectivity
-    edges4 = rg_data4['edges']
+    """edges4 = rg_data4['edges']
 
     row_names = list(edges4.keys())
     n_state = 2  # binary states: 0, 1
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     probs = [[rg_data4['probs'][n]['0']['p'], rg_data4['probs'][n]['1']['p']] for n in row_names]
-    probs = torch.tensor(probs, dtype=torch.float32, device=device)
+    probs = torch.tensor(probs, dtype=torch.float32, device=device)"""
+
     """_ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
         # Problem-specific callables / data
         sfun=rg_data4['sys_func_conn_tsum'],
@@ -363,7 +421,7 @@ if __name__ == "__main__":
     )"""
 
     ## Fourth example - Global connectivity
-    _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
+    """_ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
         # Problem-specific callables / data
         sfun=rg_data4['sys_func_global_conn_tsum'],
         probs=probs,
@@ -374,4 +432,5 @@ if __name__ == "__main__":
         unk_prob_opt = 'abs',
         output_dir=ds_root4 / "tsum_global_conn",
         save_every=10000,
-    )
+    )"""
+

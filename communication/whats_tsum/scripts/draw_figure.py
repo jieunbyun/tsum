@@ -1,3 +1,28 @@
+"""
+draw_figure.py — selectively regenerate figures for whats_tsum.
+
+Usage
+-----
+    python draw_figure.py <task> [<task> ...]
+    python draw_figure.py all
+
+Available tasks
+---------------
+    graphs              draw random graph topology figures
+    brc                 BRC monitor data (refs vs. unk-prob / mem / time)
+    brc_vs_tsum         BRC vs. TSUM comparison
+    tsum_conn           TSUM 1-OD-conn vs. global-conn
+    no_min_rule         TSUM 1-OD-conn vs. no-min-rule (Graph 1)
+    results_summary     full results summary table (includes sys-prob eval)
+    direct_summary      direct results summary table (no sys-prob eval)
+    results_summary_unc results summary allowing TSUM unclassified samples
+
+Examples
+--------
+    python draw_figure.py no_min_rule
+    python draw_figure.py tsum_conn no_min_rule
+    python draw_figure.py all
+"""
 import json
 import sys
 from matplotlib.lines import Line2D
@@ -647,6 +672,8 @@ def plot_bounds_dual_y(
 def draw_tsum_data(
     data_paths: list,
     labels: list,
+    colors: list = None,
+    save_suffix: str = "",
 ) -> None:
     """
     Draws four separate figures on BRC monitor data:
@@ -657,6 +684,13 @@ def draw_tsum_data(
 
     if len(data_paths) != len(labels):
         raise ValueError("data_paths and labels must have the same length.")
+
+    _ls_cycle = ['-', '--']
+    n = len(labels)
+    _linestyles = [_ls_cycle[i % 2] for i in range(n)]
+    _colors = colors if colors is not None else [
+        "black" if lbl.endswith("OD") else "#E69F00" for lbl in labels
+    ]
 
     sec_to_hr = 1.0 / 3600.0
 
@@ -700,12 +734,12 @@ def draw_tsum_data(
                 n = min(len(x), len(y))  # safety
                 ax.plot(
                     x[:n], y[:n],
-                    linestyle=linestyle[i], linewidth=lw, 
+                    linestyle=linestyle[i], linewidth=lw,
                     marker=marker[i], markevery=markevery[i], markersize=2.5,
                     label=label,
-                    color="black" if label.endswith("OD") else "#E69F00",
+                    color=_colors[i],
                 )
-        else:            
+        else:
             for i, label in enumerate(labels):
                 if label.endswith("OD"):
                     thin = 1
@@ -716,10 +750,10 @@ def draw_tsum_data(
                 y = ydata_dict[label]
                 ax.plot(
                     x[::thin], y[::thin],
-                    linestyle=linestyle[i], linewidth=lw, 
+                    linestyle=linestyle[i], linewidth=lw,
                     marker=marker[i], markevery=markevery[i], markersize=2.5,
                     label=label,
-                    color="black" if label.endswith("OD") else "#E69F00",
+                    color=_colors[i],
                 )
 
         ax.set_xlabel("Number of reference states", fontsize=fsz)
@@ -802,11 +836,10 @@ def draw_tsum_data(
     _plot_all(
         ydata_dict=unk_prob,
         ylabel="Unclassified probability",
-        #marker=['x', '^', 'x', '^'],
-        linestyle=['-', '--', '-', '--'],
-        markevery=[10, 20, 50, 50],
-        marker = [None]*4,
-        save_fname=HERE / "figs/tsum_refs_vs_log_unc_prob.png",
+        linestyle=_linestyles,
+        markevery=[1] * n,
+        marker=[None] * n,
+        save_fname=HERE / f"figs/tsum_refs_vs_log_unc_prob{save_suffix}.png",
         ylog=True,
         xlog=True,
         show_legend=False,
@@ -816,11 +849,10 @@ def draw_tsum_data(
     _plot_all(
         ydata_dict=mem,
         ylabel="RSS (GB)",
-        #marker=['x', '^', 'x', '^'],
-        linestyle=['-', '--', '-', '--'],
-        markevery=[20, 20, 500, 500],
-        marker = [None]*4,
-        save_fname=HERE / "figs/tsum_refs_vs_mem.png",
+        linestyle=_linestyles,
+        markevery=[1] * n,
+        marker=[None] * n,
+        save_fname=HERE / f"figs/tsum_refs_vs_mem{save_suffix}.png",
         show_legend=True,
         ylog=True,
         xlog=True,
@@ -831,11 +863,10 @@ def draw_tsum_data(
     _plot_all(
         ydata_dict=c_time,
         ylabel="Cumulative time for\nreference identification (hours)",
-        #marker=['x', '^', 'x', '^'],
-        linestyle=['-', '--', '-', '--'],
-        markevery=[20, 20, 500, 500],
-        marker = [None]*4,
-        save_fname=HERE / "figs/tsum_refs_vs_c_time.png",
+        linestyle=_linestyles,
+        markevery=[1] * n,
+        marker=[None] * n,
+        save_fname=HERE / f"figs/tsum_refs_vs_c_time{save_suffix}.png",
         ylog=True,
         ylim=[5e-4, 1e3],
         show_legend=False,
@@ -1099,154 +1130,145 @@ def get_results_summary_tsum_unc(
     summary.to_csv(save_path, index=False)
 
 if __name__ == "__main__":
+    import argparse
 
     HERE = Path(__file__).resolve().parent
 
+    TASKS = {
+        "graphs":              "draw random graph topology figures",
+        "brc":                 "BRC monitor data (refs vs. unk-prob / mem / time)",
+        "brc_vs_tsum":         "BRC vs. TSUM comparison",
+        "tsum_conn":           "TSUM 1-OD-conn vs. global-conn",
+        "no_min_rule":         "TSUM 1-OD-conn vs. no-min-rule (Graph 1)",
+        "results_summary":     "full results summary table (includes sys-prob eval)",
+        "direct_summary":      "direct results summary table (no sys-prob eval)",
+        "results_summary_unc": "results summary allowing TSUM unclassified samples",
+    }
+
+    parser = argparse.ArgumentParser(
+        description="Selectively regenerate figures for whats_tsum.",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument(
+        "tasks",
+        nargs="+",
+        metavar="TASK",
+        help=(
+            "One or more tasks to run, or 'all'. Available tasks:\n"
+            + "\n".join(f"  {k:<22} {v}" for k, v in TASKS.items())
+        ),
+    )
+    args = parser.parse_args()
+
+    unknown = set(args.tasks) - set(TASKS) - {"all"}
+    if unknown:
+        parser.error(f"Unknown task(s): {', '.join(sorted(unknown))}. "
+                     f"Choose from: all, {', '.join(TASKS)}")
+
+    run = set(TASKS) if "all" in args.tasks else set(args.tasks)
+
     # --- Draw random graphs from JSON ---
-    """
-    for rg, leg in zip(
-        ['rg1', 'rg2', 'rg3', 'rg4'],
-        [True, False, True, False],  
-    ):
-        draw_graph_from_json(
-            nodes_path=HERE.parent / f"results/{rg}/v1/data/nodes.json",
-            edges_path=HERE.parent / f"results/{rg}/v1/data/edges.json",
-            save_fname=HERE / f"figs/{rg}_graph.png",
-            show_legend=leg,
-        )
-    """
+    if "graphs" in run:
+        for rg, leg in zip(
+            ["rg1", "rg2", "rg3", "rg4"],
+            [True, False, True, False],
+        ):
+            draw_graph_from_json(
+                nodes_path=HERE.parent / f"results/{rg}/v1/data/nodes.json",
+                edges_path=HERE.parent / f"results/{rg}/v1/data/edges.json",
+                save_fname=HERE / f"figs/{rg}_graph.png",
+                show_legend=leg,
+            )
 
     # --- BRC monitor data ---
-    #"""
-    draw_brc_monitor_data(
-        data_paths=[
-            HERE.parent / "results/rg1/v1/brc/monitor_conn.json",
-            HERE.parent / "results/rg2/v1/brc/monitor_conn.json",
-        ],
-        labels=[
-            "Graph 1",
-            "Graph 2",
-        ]
-    )
-    #"""
-
-    # --- Chen & Lin (2012) data ---
-    #draw_chen12_data()
+    if "brc" in run:
+        draw_brc_monitor_data(
+            data_paths=[
+                HERE.parent / "results/rg1/v1/brc/monitor_conn.json",
+                HERE.parent / "results/rg2/v1/brc/monitor_conn.json",
+            ],
+            labels=["Graph 1", "Graph 2"],
+        )
 
     # --- BRC vs. TSUM ---
-    """
-    draw_brc_vs_tsum_data(
-        data_paths=[
-            HERE.parent / "results/rg1/v1/brc/monitor_conn.json",
-            HERE.parent / "results/rg2/v1/brc/monitor_conn.json",
-            HERE.parent / "results/rg1/v1/tsum_conn/metrics.jsonl",
-            HERE.parent / "results/rg2/v1/tsum_conn/metrics.jsonl",
-        ],
-        labels = [
-            "Graph 1; BRC",
-            "Graph 2; BRC",
-            "Graph 1; TSUM",
-            "Graph 2; TSUM",
-        ]
-    )
-    """
+    if "brc_vs_tsum" in run:
+        draw_brc_vs_tsum_data(
+            data_paths=[
+                HERE.parent / "results/rg1/v1/brc/monitor_conn.json",
+                HERE.parent / "results/rg2/v1/brc/monitor_conn.json",
+                HERE.parent / "results/rg1/v1/tsum_conn/metrics.jsonl",
+                HERE.parent / "results/rg2/v1/tsum_conn/metrics.jsonl",
+            ],
+            labels=["Graph 1; BRC", "Graph 2; BRC", "Graph 1; TSUM", "Graph 2; TSUM"],
+        )
 
-    # ---TSUM: 1 OD conn vs g-conn ---
-    #"""
-    draw_tsum_data(
-        data_paths=[
-            HERE.parent / "results/rg1/v1/tsum_conn/metrics.jsonl",
-            HERE.parent / "results/rg2/v1/tsum_conn/metrics.jsonl",
-            HERE.parent / "results/rg1/v1/tsum_global_conn/metrics.jsonl",
-            HERE.parent / "results/rg2/v1/tsum_global_conn/metrics.jsonl",
-        ],
-        labels = [
-            "Graph 1; 1 OD",
-            "Graph 2; 1 OD",
-            "Graph 1; Global",
-            "Graph 2; Global",
-        ]
-    )
-    #"""
+    # --- TSUM: 1-OD-conn vs. global-conn ---
+    if "tsum_conn" in run:
+        draw_tsum_data(
+            data_paths=[
+                HERE.parent / "results/rg1/v1/tsum_conn/metrics.jsonl",
+                HERE.parent / "results/rg2/v1/tsum_conn/metrics.jsonl",
+                HERE.parent / "results/rg1/v1/tsum_global_conn/metrics.jsonl",
+                HERE.parent / "results/rg2/v1/tsum_global_conn/metrics.jsonl",
+            ],
+            labels=["Graph 1; 1 OD", "Graph 2; 1 OD", "Graph 1; Global", "Graph 2; Global"],
+        )
 
-    # --- Get results summary table ---
-    """
-    get_results_summary(
-        data_paths=[
-            #HERE.parent / "results/rg2/v1/tsum_conn/metrics.jsonl",
-            #HERE.parent / "results/rg1/v1/tsum_conn/metrics.jsonl",
-            #HERE.parent / "results/rg1/v1/tsum_global_conn/metrics.jsonl",
-            #HERE.parent / "results/rg2/v1/tsum_global_conn/metrics.jsonl",
-            HERE.parent / "results/rg1/v1/brc/monitor_conn.json",
-            HERE.parent / "results/rg2/v1/brc/monitor_conn.json",
-        ],
-        labels=[
-            #"Graph 2; 1 OD; TSUM",
-            #"Graph 1; 1 OD; TSUM",
-            #"Graph 1; Global; TSUM",
-            #"Graph 2; Global; TSUM",
-            "Graph 1; 1 OD; BRC",
-            "Graph 2; 1 OD; BRC",
-        ], 
-        refs_paths=[
-            #HERE.parent / "results/rg2/v1/tsum_conn",
-            #HERE.parent / "results/rg1/v1/tsum_conn",
-            #HERE.parent / "results/rg1/v1/tsum_global_conn",
-            #HERE.parent / "results/rg2/v1/tsum_global_conn",
-            HERE.parent / "results/rg1/v1/brc/brs_conn.parquet",
-            HERE.parent / "results/rg2/v1/brc/brs_conn.parquet",
-        ],
-        graph_paths=[
-            #HERE.parent / f"results/rg2/v1/data",
-            #HERE.parent / f"results/rg1/v1/data",
-            #HERE.parent / f"results/rg1/v1/data",
-            #HERE.parent / f"results/rg2/v1/data",
-            HERE.parent / f"results/rg1/v1/data",
-            HERE.parent / f"results/rg2/v1/data",
-        ],
-        #save_path=HERE / f"figs/results_summary.csv",
-        save_path=HERE / f"figs/results_summary_brc_only.csv",
-    )
-    """
+    # --- TSUM: 1-OD-conn vs. no-min-rule (Graph 1) ---
+    if "no_min_rule" in run:
+        draw_tsum_data(
+            data_paths=[
+                HERE.parent / "results/rg1/v1/tsum_conn/metrics.jsonl",
+                HERE.parent / "results/rg1/v1/tsum_conn_no_min_rule/metrics.jsonl",
+            ],
+            labels=["Graph 1; 1 OD", "Graph 1; No min rule"],
+            colors=["black", "#56B4E9"],
+            save_suffix="_no_min_rule",
+        )
 
-    # --- Get direct results summary (no sys prob eval) ---
-    """
-    get_direct_results_summary(
-        data_paths=[
-            HERE.parent / "results/rg1/v1/brc/monitor_conn.json",
-            HERE.parent / "results/rg1/v1/tsum_conn/metrics.jsonl",
-            HERE.parent / "results/rg1/v1/tsum_global_conn/metrics.jsonl",
-            HERE.parent / "results/rg2/v1/brc/monitor_conn.json",
-            HERE.parent / "results/rg2/v1/tsum_conn/metrics.jsonl",
-            HERE.parent / "results/rg2/v1/tsum_global_conn/metrics.jsonl",            
-        ],
-        labels=[
-            "Graph 1; 1 OD; BRC",
-            "Graph 1; 1 OD; TSUM",
-            "Graph 1; Global; TSUM",
-            "Graph 2; 1 OD; BRC",
-            "Graph 2; 1 OD; TSUM",
-            "Graph 2; Global; TSUM",
-        ], 
-        save_path=HERE / f"figs/direct_results_summary.csv",
-    )
-    """
+    # --- Full results summary (includes sys-prob eval) ---
+    if "results_summary" in run:
+        get_results_summary(
+            data_paths=[
+                HERE.parent / "results/rg1/v1/brc/monitor_conn.json",
+                HERE.parent / "results/rg2/v1/brc/monitor_conn.json",
+            ],
+            labels=["Graph 1; 1 OD; BRC", "Graph 2; 1 OD; BRC"],
+            refs_paths=[
+                HERE.parent / "results/rg1/v1/brc/brs_conn.parquet",
+                HERE.parent / "results/rg2/v1/brc/brs_conn.parquet",
+            ],
+            graph_paths=[
+                HERE.parent / "results/rg1/v1/data",
+                HERE.parent / "results/rg2/v1/data",
+            ],
+            save_path=HERE / "figs/results_summary_brc_only.csv",
+        )
 
-    # --- Get results summary allowing for TSUM to have unclassified samples ---
-    """
-    get_results_summary_tsum_unc(
-        data_paths=[
-            HERE.parent / "results/rg2/v1/tsum_global_conn/metrics.jsonl",
-        ],
-        labels=[
-            "Graph 2; Global; TSUM",
-        ], 
-        refs_paths=[
-            HERE.parent / "results/rg2/v1/tsum_global_conn",
-        ],
-        graph_paths=[
-            HERE.parent / f"results/rg2/v1/data",
-        ],
-        save_path=HERE / f"figs/results_summary_unc.csv",
-    )
-    """
+    # --- Direct results summary (no sys-prob eval) ---
+    if "direct_summary" in run:
+        get_direct_results_summary(
+            data_paths=[
+                HERE.parent / "results/rg1/v1/brc/monitor_conn.json",
+                HERE.parent / "results/rg1/v1/tsum_conn/metrics.jsonl",
+                HERE.parent / "results/rg1/v1/tsum_global_conn/metrics.jsonl",
+                HERE.parent / "results/rg2/v1/brc/monitor_conn.json",
+                HERE.parent / "results/rg2/v1/tsum_conn/metrics.jsonl",
+                HERE.parent / "results/rg2/v1/tsum_global_conn/metrics.jsonl",
+            ],
+            labels=[
+                "Graph 1; 1 OD; BRC", "Graph 1; 1 OD; TSUM", "Graph 1; Global; TSUM",
+                "Graph 2; 1 OD; BRC", "Graph 2; 1 OD; TSUM", "Graph 2; Global; TSUM",
+            ],
+            save_path=HERE / "figs/direct_results_summary.csv",
+        )
+
+    # --- Results summary allowing TSUM unclassified samples ---
+    if "results_summary_unc" in run:
+        get_results_summary_tsum_unc(
+            data_paths=[HERE.parent / "results/rg2/v1/tsum_global_conn/metrics.jsonl"],
+            labels=["Graph 2; Global; TSUM"],
+            refs_paths=[HERE.parent / "results/rg2/v1/tsum_global_conn"],
+            graph_paths=[HERE.parent / "results/rg2/v1/data"],
+            save_path=HERE / "figs/results_summary_unc.csv",
+        )
