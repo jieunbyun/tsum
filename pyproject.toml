@@ -16,6 +16,8 @@ dependencies = [
     "pyyaml>=6.0",
     "pytest>=8.4.2",
     "psutil>=5.9",
+    "typer>=0.19.2",
+    "matplotlib>=3.9.4",
 ]
 
 [build-system]
@@ -30,3 +32,8 @@ include = ["tsum*"]
 minversion = "7.0"
 addopts = "-ra -q"
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.30.1",
+]
