@@ -183,6 +183,8 @@ def generate_random_network_data(name: str = "rg",
 def example1(
     n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
     devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
+    n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
+    sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
 ):
 
    #brc_rss_max_gb = 20.0  # Max RSS for BRC in GB
@@ -236,6 +238,8 @@ def example1(
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
         output_dir=ds_root1 / "tsum_conn",
+        n_sample=n_sample,
+        sample_batch_size=sample_batch_size,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -263,6 +267,8 @@ def example1(
 def example2(
     n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
     devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
+    n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
+    sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
 ):
 
     # Larger example
@@ -295,6 +301,8 @@ def example2(
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
         output_dir=ds_root2 / "tsum_conn",
+        n_sample=n_sample,
+        sample_batch_size=sample_batch_size,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -310,6 +318,8 @@ def example2(
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
         output_dir=ds_root2 / "tsum_global_conn",
+        n_sample=n_sample,
+        sample_batch_size=sample_batch_size,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -319,6 +329,8 @@ def example2(
 def example3(
     n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
     devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
+    n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
+    sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
 ):
 
     # example in between (1)
@@ -352,6 +364,8 @@ def example3(
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
         output_dir=ds_root3 / "tsum_conn",
+        n_sample=n_sample,
+        sample_batch_size=sample_batch_size,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -367,6 +381,8 @@ def example3(
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
         output_dir=ds_root3 / "tsum_global_conn",
+        n_sample=n_sample,
+        sample_batch_size=sample_batch_size,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -376,6 +392,8 @@ def example3(
 def example4(
     n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
     devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
+    n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
+    sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
 ):
 
     # example in between (2)
@@ -410,6 +428,8 @@ def example4(
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
         output_dir=ds_root4 / "tsum_conn",
+        n_sample=n_sample,
+        sample_batch_size=sample_batch_size,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -426,6 +446,8 @@ def example4(
         unk_prob_opt = 'abs',
         output_dir=ds_root4 / "tsum_global_conn",
         save_every=10000,
+        n_sample=n_sample,
+        sample_batch_size=sample_batch_size,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -452,6 +474,8 @@ def run_parallel(
     n_gpus: int = typer.Option(0, help="Number of GPUs available. 0 = auto-detect."),
     n_workers: int = typer.Option(1, help="Number of CPU workers per example for parallel sfun + minimization"),
     gpus_per_example: int = typer.Option(1, help="Number of GPUs per example for multi-GPU sampling. >1 enables multi-GPU within each example."),
+    n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
+    sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
 ):
     """Run multiple examples in parallel, each pinned to one or more GPUs."""
 
@@ -482,7 +506,10 @@ def run_parallel(
             device_str = ""
             print(f"Launching {cmd_name} on CPU")
 
-        cmd = [sys.executable, script, cmd_name, "--n-workers", str(n_workers)]
+        cmd = [sys.executable, script, cmd_name,
+               "--n-workers", str(n_workers),
+               "--n-sample", str(n_sample),
+               "--sample-batch-size", str(sample_batch_size)]
         if device_str and gpus_per_example > 1:
             cmd += ["--devices", device_str]
         proc = subprocess.Popen(
