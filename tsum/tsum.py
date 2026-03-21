@@ -1853,6 +1853,7 @@ def run_rule_extraction_by_mcs(
     save_every: int = 10,
     n_sample: int = 10_000_000,
     sample_batch_size: int = 100_000,
+    max_search_loops: int = 0,  # max batches per round for searching unknowns (0 = use n_sample // sample_batch_size)
     min_rule_search: bool = True,
     rule_update_verbose: bool = True,
     # Parallelism
@@ -1946,6 +1947,8 @@ def run_rule_extraction_by_mcs(
         print(f"Multi-GPU mode: sampling across {devices}")
 
     total_loops = max(n_sample // sample_batch_size, 1)
+    # Search loops: capped for finding unknowns; full total_loops used only for probability estimation
+    search_loops = min(max_search_loops, total_loops) if max_search_loops > 0 else total_loops
 
     # ---- main loop ----
     while is_new_cand and (unk_prob > unk_prob_thres if unk_prob_opt == "abs" else unk_prob / (min([last_probs["failure"]+1e-12, last_probs["survival"]+1e-12])) > unk_prob_thres):
@@ -1965,7 +1968,7 @@ def run_rule_extraction_by_mcs(
         samples = None
         i = -1
 
-        for i in range(total_loops):
+        for i in range(search_loops):
             if _use_multi_gpu:
                 # Split batch across GPUs, sample + classify in parallel threads
                 n_gpus = len(_gpu_devices)
@@ -2012,7 +2015,10 @@ def run_rule_extraction_by_mcs(
         # If no unknowns found, skip candidate creation and continue to periodic update / exit
         if not is_new_cand:
             probs_updated = False
-            if (n_round % prob_update_every) == 0:
+            # When search is capped, the unk_prob estimate from search_loops is rough;
+            # force a full probability update to get an accurate termination check.
+            needs_full_estimate = (search_loops < total_loops) or (n_round % prob_update_every) == 0
+            if needs_full_estimate:
                 # refresh with a full estimate
                 loops = max(n_sample // sample_batch_size, 1)
                 c2 = {"survival": 0, "failure": 0, "unknown": 0}

@@ -185,6 +185,7 @@ def example1(
     devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
     n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
     sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
+    max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
     output_str: str = typer.Option("", help="str for output folder"),
 ):
 
@@ -241,6 +242,7 @@ def example1(
         output_dir=ds_root1 / "tsum_conn",
         n_sample=n_sample,
         sample_batch_size=sample_batch_size,
+        max_search_loops=max_search_loops,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -259,6 +261,7 @@ def example1(
         output_dir=ds_root1 / ('tsum_global' + output_str),
         n_sample = 10_000_000_000,
         sample_batch_size = 1_000_000,
+        max_search_loops=max_search_loops,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -270,6 +273,7 @@ def example2(
     devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
     n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
     sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
+    max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
 ):
 
     # Larger example
@@ -304,6 +308,7 @@ def example2(
         output_dir=ds_root2 / "tsum_conn",
         n_sample=n_sample,
         sample_batch_size=sample_batch_size,
+        max_search_loops=max_search_loops,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -321,6 +326,7 @@ def example2(
         output_dir=ds_root2 / "tsum_global_conn",
         n_sample=n_sample,
         sample_batch_size=sample_batch_size,
+        max_search_loops=max_search_loops,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -332,6 +338,7 @@ def example3(
     devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
     n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
     sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
+    max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
 ):
 
     # example in between (1)
@@ -367,6 +374,7 @@ def example3(
         output_dir=ds_root3 / "tsum_conn",
         n_sample=n_sample,
         sample_batch_size=sample_batch_size,
+        max_search_loops=max_search_loops,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -384,6 +392,7 @@ def example3(
         output_dir=ds_root3 / "tsum_global_conn",
         n_sample=n_sample,
         sample_batch_size=sample_batch_size,
+        max_search_loops=max_search_loops,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -395,6 +404,7 @@ def example4(
     devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
     n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
     sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
+    max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
 ):
 
     # example in between (2)
@@ -431,6 +441,7 @@ def example4(
         output_dir=ds_root4 / "tsum_conn",
         n_sample=n_sample,
         sample_batch_size=sample_batch_size,
+        max_search_loops=max_search_loops,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -449,6 +460,7 @@ def example4(
         save_every=10000,
         n_sample=n_sample,
         sample_batch_size=sample_batch_size,
+        max_search_loops=max_search_loops,
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
@@ -477,6 +489,7 @@ def run_parallel(
     gpus_per_example: int = typer.Option(1, help="Number of GPUs per example for multi-GPU sampling. >1 enables multi-GPU within each example."),
     n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
     sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
+    max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
 ):
     """Run multiple examples in parallel, each pinned to one or more GPUs."""
 
@@ -510,7 +523,8 @@ def run_parallel(
         cmd = [sys.executable, script, cmd_name,
                "--n-workers", str(n_workers),
                "--n-sample", str(n_sample),
-               "--sample-batch-size", str(sample_batch_size)]
+               "--sample-batch-size", str(sample_batch_size),
+               "--max-search-loops", str(max_search_loops)]
         if device_str and gpus_per_example > 1:
             cmd += ["--devices", device_str]
         proc = subprocess.Popen(
