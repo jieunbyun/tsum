@@ -256,7 +256,7 @@ def example1(
         sys_surv_st=1,
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
-        output_dir=ds_root1 / 'tsum_global' + output_str,
+        output_dir=ds_root1 / ('tsum_global' + output_str),
         n_sample = 10_000_000_000,
         sample_batch_size = 1_000_000,
         n_workers=n_workers,
