@@ -225,6 +225,7 @@ def example1(
     probs = [[rg_data1['probs'][n]['0']['p'], rg_data1['probs'][n]['1']['p']] for n in row_names]
     probs = torch.tensor(probs, dtype=torch.float32, device=device)
 
+    """
     _ = tsum.run_rule_extraction_by_mcs(
         # Problem-specific callables / data
         sfun=rg_data1['sys_func_conn_tsum'],
@@ -238,8 +239,9 @@ def example1(
         n_workers=n_workers,
         devices=device_list if len(device_list) > 1 else None,
     )
+    """
 
-    """## First example - Global connectivity
+    ## First example - Global connectivity
     _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next runs
         # Problem-specific callables / data
         sfun=rg_data1['sys_func_global_conn_tsum'],
@@ -249,8 +251,12 @@ def example1(
         sys_surv_st=1,
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
-        output_dir=ds_root1 / "tsum_global_conn",
-    )"""
+        output_dir=ds_root1 / "tsum_global_conn_1M_batch",
+        n_sample = 10_000_000_000,
+        sample_batch_size = 1_000_000,
+        n_workers=n_workers,
+        devices=device_list if len(device_list) > 1 else None,
+    )
 
 
 @app.command()
