@@ -185,6 +185,7 @@ def example1(
     devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
     n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
     sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
+    output_str: str = typer.Option("", help="str for output folder"),
 ):
 
    #brc_rss_max_gb = 20.0  # Max RSS for BRC in GB
@@ -255,7 +256,7 @@ def example1(
         sys_surv_st=1,
         unk_prob_thres = 1e-5,
         unk_prob_opt = 'abs',
-        output_dir=ds_root1 / "tsum_global_conn_1M_batch",
+        output_dir=ds_root1 / 'tsum_global' + output_str,
         n_sample = 10_000_000_000,
         sample_batch_size = 1_000_000,
         n_workers=n_workers,
