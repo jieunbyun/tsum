@@ -1146,6 +1146,20 @@ def classify_samples(samples, survival_rules, failure_rules):
     }
     return counts
 
+def _sample_and_classify_on_device(args):
+    """
+    Sample + classify on a single GPU device. Used by multi-GPU sampling.
+    Runs in a thread — GPU ops release the GIL during kernel execution.
+    """
+    probs_dev, n_sample, rules_surv_dev, rules_fail_dev, with_indices = args
+    samples = sample_categorical(probs_dev, n_sample)
+    if with_indices:
+        res = classify_samples_with_indices(samples, rules_surv_dev, rules_fail_dev, return_masks=True)
+    else:
+        res = classify_samples(samples, rules_surv_dev, rules_fail_dev)
+    return samples, res
+
+
 def sample_categorical(probs, n_sample):
     """
     Sample binary event tensors from categorical distributions.
@@ -1843,6 +1857,7 @@ def run_rule_extraction_by_mcs(
     rule_update_verbose: bool = True,
     # Parallelism
     n_workers: int = 1,  # number of CPU workers for parallel sfun + minimization
+    devices: Optional[List[str]] = None,  # list of GPU devices for multi-GPU sampling, e.g. ["cuda:0", "cuda:1"]
     # Output control
     output_dir: str = "tsum_res",
     surv_json_name: str = None,
@@ -1917,6 +1932,19 @@ def run_rule_extraction_by_mcs(
         _pool = _ctx.Pool(n_workers)
         print(f"Parallel mode: {n_workers} CPU workers for sfun + minimization")
 
+    # ---- multi-GPU setup ----
+    _use_multi_gpu = False
+    _gpu_devices = []
+    _gpu_probs = []       # probs replicated to each device
+    _gpu_thread_pool = None
+    if devices is not None and len(devices) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        _gpu_devices = [torch.device(d) for d in devices]
+        _gpu_probs = [probs.to(d) for d in _gpu_devices]
+        _gpu_thread_pool = ThreadPoolExecutor(max_workers=len(_gpu_devices))
+        _use_multi_gpu = True
+        print(f"Multi-GPU mode: sampling across {devices}")
+
     total_loops = max(n_sample // sample_batch_size, 1)
 
     # ---- main loop ----
@@ -1938,12 +1966,38 @@ def run_rule_extraction_by_mcs(
         i = -1
 
         for i in range(total_loops):
-            samples = sample_categorical(probs, sample_batch_size)  # (B, n_var, n_state)
-            res = classify_samples_with_indices(samples, rules_mat_surv, rules_mat_fail, return_masks=True)
+            if _use_multi_gpu:
+                # Split batch across GPUs, sample + classify in parallel threads
+                n_gpus = len(_gpu_devices)
+                per_gpu = sample_batch_size // n_gpus
+                remainder = sample_batch_size % n_gpus
+                tasks = []
+                for gi in range(n_gpus):
+                    n_gi = per_gpu + (1 if gi < remainder else 0)
+                    rules_s_gi = rules_mat_surv.to(_gpu_devices[gi])
+                    rules_f_gi = rules_mat_fail.to(_gpu_devices[gi])
+                    tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, True))
 
-            counts["survival"] += int(res["survival"])
-            counts["failure"]  += int(res["failure"])
-            counts["unknown"]  += int(res["unknown"])   # FIX: track unknowns too
+                futures = list(_gpu_thread_pool.map(_sample_and_classify_on_device, tasks))
+
+                # Merge results back to primary device
+                all_samples = []
+                for samples_gi, res_gi in futures:
+                    all_samples.append(samples_gi.to(device))
+                    counts["survival"] += int(res_gi["survival"])
+                    counts["failure"]  += int(res_gi["failure"])
+                    counts["unknown"]  += int(res_gi["unknown"])
+                samples = torch.cat(all_samples, dim=0)
+
+                # Re-classify merged batch on primary device for correct indices
+                res = classify_samples_with_indices(samples, rules_mat_surv, rules_mat_fail, return_masks=True)
+            else:
+                samples = sample_categorical(probs, sample_batch_size)  # (B, n_var, n_state)
+                res = classify_samples_with_indices(samples, rules_mat_surv, rules_mat_fail, return_masks=True)
+
+                counts["survival"] += int(res["survival"])
+                counts["failure"]  += int(res["failure"])
+                counts["unknown"]  += int(res["unknown"])
 
             if res['idx_unknown'].numel() > 0:
                 is_new_cand = True
@@ -1963,10 +2017,24 @@ def run_rule_extraction_by_mcs(
                 loops = max(n_sample // sample_batch_size, 1)
                 c2 = {"survival": 0, "failure": 0, "unknown": 0}
                 for _ in range(loops):
-                    s = sample_categorical(probs, sample_batch_size)
-                    ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
-                    for k in c2:
-                        c2[k] += ci[k]
+                    if _use_multi_gpu:
+                        n_gpus = len(_gpu_devices)
+                        per_gpu = sample_batch_size // n_gpus
+                        remainder = sample_batch_size % n_gpus
+                        tasks = []
+                        for gi in range(n_gpus):
+                            n_gi = per_gpu + (1 if gi < remainder else 0)
+                            rules_s_gi = rules_mat_surv.to(_gpu_devices[gi])
+                            rules_f_gi = rules_mat_fail.to(_gpu_devices[gi])
+                            tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, False))
+                        for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
+                            for k in c2:
+                                c2[k] += ci[k]
+                    else:
+                        s = sample_categorical(probs, sample_batch_size)
+                        ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
+                        for k in c2:
+                            c2[k] += ci[k]
                 sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
                 print("---")
                 print(f"Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
@@ -2090,10 +2158,24 @@ def run_rule_extraction_by_mcs(
             loops = max(n_sample // sample_batch_size, 1)
             c2 = {"survival": 0, "failure": 0, "unknown": 0}
             for _ in range(loops):
-                s = sample_categorical(probs, sample_batch_size)
-                ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
-                for k in c2:
-                    c2[k] += ci[k]
+                if _use_multi_gpu:
+                    n_gpus = len(_gpu_devices)
+                    per_gpu = sample_batch_size // n_gpus
+                    remainder = sample_batch_size % n_gpus
+                    tasks = []
+                    for gi in range(n_gpus):
+                        n_gi = per_gpu + (1 if gi < remainder else 0)
+                        rules_s_gi = rules_mat_surv.to(_gpu_devices[gi])
+                        rules_f_gi = rules_mat_fail.to(_gpu_devices[gi])
+                        tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, False))
+                    for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
+                        for k in c2:
+                            c2[k] += ci[k]
+                else:
+                    s = sample_categorical(probs, sample_batch_size)
+                    ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
+                    for k in c2:
+                        c2[k] += ci[k]
             sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
             print("---")
             print(f"Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
@@ -2146,19 +2228,28 @@ def run_rule_extraction_by_mcs(
     _save_pt(rules_mat_surv, rules_surv_pt_path)
     _save_pt(rules_mat_fail, rules_fail_pt_path)
 
-    # ---- clean up worker pool ----
-    if _pool is not None:
-        _pool.close()
-        _pool.join()
-
     # Final probability check
     loops = max(n_sample // sample_batch_size, 1)
     c2 = {"survival": 0, "failure": 0, "unknown": 0}
     for _ in range(loops):
-        s = sample_categorical(probs, sample_batch_size)
-        ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
-        for k in c2:
-            c2[k] += ci[k]
+        if _use_multi_gpu:
+            n_gpus = len(_gpu_devices)
+            per_gpu = sample_batch_size // n_gpus
+            remainder = sample_batch_size % n_gpus
+            tasks = []
+            for gi in range(n_gpus):
+                n_gi = per_gpu + (1 if gi < remainder else 0)
+                rules_s_gi = rules_mat_surv.to(_gpu_devices[gi])
+                rules_f_gi = rules_mat_fail.to(_gpu_devices[gi])
+                tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, False))
+            for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
+                for k in c2:
+                    c2[k] += ci[k]
+        else:
+            s = sample_categorical(probs, sample_batch_size)
+            ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
+            for k in c2:
+                c2[k] += ci[k]
     sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
     print("---")
     print(f"[Final results] Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
@@ -2178,6 +2269,13 @@ def run_rule_extraction_by_mcs(
         "avg_len_fail": _avg_rule_len(rules_fail),
         "rss_gb": rss_gb,   
     })
+
+    # ---- clean up worker pools ----
+    if _pool is not None:
+        _pool.close()
+        _pool.join()
+    if _gpu_thread_pool is not None:
+        _gpu_thread_pool.shutdown(wait=False)
 
     return {
         "sys_vals": sorted(sys_val_list, key=mixed_sort_key),

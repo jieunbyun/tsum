@@ -182,6 +182,7 @@ def generate_random_network_data(name: str = "rg",
 @app.command()
 def example1(
     n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
+    devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
 ):
 
    #brc_rss_max_gb = 20.0  # Max RSS for BRC in GB
@@ -215,7 +216,8 @@ def example1(
     gc.collect()
     """
      # Run TSUM
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
+    device = torch.device(device_list[0] if device_list else ('cuda' if torch.cuda.is_available() else 'cpu'))
     ## First example - 1OD connectivity
     row_names = list(edges1.keys())
 
@@ -234,6 +236,7 @@ def example1(
         unk_prob_opt = 'abs',
         output_dir=ds_root1 / "tsum_conn",
         n_workers=n_workers,
+        devices=device_list if len(device_list) > 1 else None,
     )
 
     """## First example - Global connectivity
@@ -253,6 +256,7 @@ def example1(
 @app.command()
 def example2(
     n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
+    devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
 ):
 
     # Larger example
@@ -271,7 +275,8 @@ def example2(
     ## Second example - 1OD connectivity
     row_names = list(edges2.keys())
     n_state = 2  # binary states: 0, 1
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
+    device = torch.device(device_list[0] if device_list else ('cuda' if torch.cuda.is_available() else 'cpu'))
     probs = [[rg_data2['probs'][n]['0']['p'], rg_data2['probs'][n]['1']['p']] for n in row_names]
     probs = torch.tensor(probs, dtype=torch.float32, device=device)
     _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
@@ -285,6 +290,7 @@ def example2(
         unk_prob_opt = 'abs',
         output_dir=ds_root2 / "tsum_conn",
         n_workers=n_workers,
+        devices=device_list if len(device_list) > 1 else None,
     )
 
     ## Second example - Global connectivity
@@ -299,12 +305,14 @@ def example2(
         unk_prob_opt = 'abs',
         output_dir=ds_root2 / "tsum_global_conn",
         n_workers=n_workers,
+        devices=device_list if len(device_list) > 1 else None,
     )
 
 
 @app.command()
 def example3(
     n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
+    devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
 ):
 
     # example in between (1)
@@ -324,7 +332,8 @@ def example3(
     row_names = list(edges3.keys())
 
     n_state = 2  # binary states: 0, 1
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
+    device = torch.device(device_list[0] if device_list else ('cuda' if torch.cuda.is_available() else 'cpu'))
     probs = [[rg_data3['probs'][n]['0']['p'], rg_data3['probs'][n]['1']['p']] for n in row_names]
     probs = torch.tensor(probs, dtype=torch.float32, device=device)
     _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
@@ -338,6 +347,7 @@ def example3(
         unk_prob_opt = 'abs',
         output_dir=ds_root3 / "tsum_conn",
         n_workers=n_workers,
+        devices=device_list if len(device_list) > 1 else None,
     )
 
     ## Third example - Global connectivity
@@ -352,12 +362,14 @@ def example3(
         unk_prob_opt = 'abs',
         output_dir=ds_root3 / "tsum_global_conn",
         n_workers=n_workers,
+        devices=device_list if len(device_list) > 1 else None,
     )
 
 
 @app.command()
 def example4(
     n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
+    devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
 ):
 
     # example in between (2)
@@ -377,7 +389,8 @@ def example4(
     row_names = list(edges4.keys())
 
     n_state = 2  # binary states: 0, 1
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
+    device = torch.device(device_list[0] if device_list else ('cuda' if torch.cuda.is_available() else 'cpu'))
     probs = [[rg_data4['probs'][n]['0']['p'], rg_data4['probs'][n]['1']['p']] for n in row_names]
     probs = torch.tensor(probs, dtype=torch.float32, device=device)
 
@@ -392,6 +405,7 @@ def example4(
         unk_prob_opt = 'abs',
         output_dir=ds_root4 / "tsum_conn",
         n_workers=n_workers,
+        devices=device_list if len(device_list) > 1 else None,
     )
 
     ## Fourth example - Global connectivity
@@ -407,6 +421,7 @@ def example4(
         output_dir=ds_root4 / "tsum_global_conn",
         save_every=10000,
         n_workers=n_workers,
+        devices=device_list if len(device_list) > 1 else None,
     )
 
     """
@@ -430,8 +445,9 @@ def run_parallel(
     examples: str = typer.Argument("1,2,3,4", help="Comma-separated example numbers to run, e.g. '1,2,3,4'"),
     n_gpus: int = typer.Option(0, help="Number of GPUs available. 0 = auto-detect."),
     n_workers: int = typer.Option(1, help="Number of CPU workers per example for parallel sfun + minimization"),
+    gpus_per_example: int = typer.Option(1, help="Number of GPUs per example for multi-GPU sampling. >1 enables multi-GPU within each example."),
 ):
-    """Run multiple examples in parallel, each pinned to a different GPU."""
+    """Run multiple examples in parallel, each pinned to one or more GPUs."""
 
     example_nums = [int(x.strip()) for x in examples.split(",")]
 
@@ -447,14 +463,22 @@ def run_parallel(
         cmd_name = f"example{ex_num}"
         env = os.environ.copy()
         if n_gpus > 0:
-            gpu_id = i % n_gpus
-            env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-            print(f"Launching {cmd_name} on GPU {gpu_id}")
+            # Assign gpus_per_example GPUs to each example (round-robin)
+            assigned = []
+            for g in range(gpus_per_example):
+                assigned.append((i * gpus_per_example + g) % n_gpus)
+            env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in assigned)
+            # When CUDA_VISIBLE_DEVICES remaps, devices appear as cuda:0, cuda:1, ...
+            device_str = ",".join(f"cuda:{j}" for j in range(len(assigned)))
+            print(f"Launching {cmd_name} on physical GPU(s) {assigned}")
         else:
             env["CUDA_VISIBLE_DEVICES"] = ""
+            device_str = ""
             print(f"Launching {cmd_name} on CPU")
 
         cmd = [sys.executable, script, cmd_name, "--n-workers", str(n_workers)]
+        if device_str and gpus_per_example > 1:
+            cmd += ["--devices", device_str]
         proc = subprocess.Popen(
             cmd,
             env=env,
