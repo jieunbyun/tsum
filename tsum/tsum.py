@@ -1967,7 +1967,12 @@ def run_rule_extraction_by_mcs(
         res = None
         samples = None
         i = -1
+        _t_search = 0.0
+        _t_minimize = 0.0
+        _t_rules = 0.0
+        _t_probs = 0.0
 
+        _ts = time.perf_counter()
         for i in range(search_loops):
             if _use_multi_gpu:
                 # Split batch across GPUs, sample + classify in parallel threads
@@ -2005,6 +2010,8 @@ def run_rule_extraction_by_mcs(
             if res['idx_unknown'].numel() > 0:
                 is_new_cand = True
                 break
+
+        _t_search = time.perf_counter() - _ts
 
         # denominator = number of samples actually processed
         n_sample_actual = sample_batch_size * (i + 1)
@@ -2055,6 +2062,10 @@ def run_rule_extraction_by_mcs(
             metrics_log.append({
                 "round": n_round,
                 "time_sec": dt,
+                "t_search": round(_t_search, 3),
+                "t_minimize": 0.0,
+                "t_rules": 0.0,
+                "t_probs": round(dt - _t_search, 3),
                 "n_rules_surv": int(len(rules_mat_surv)),
                 "n_rules_fail": int(len(rules_mat_fail)),
                 "probs_updated": probs_updated,
@@ -2081,6 +2092,7 @@ def run_rule_extraction_by_mcs(
         # --- We have unknowns: extract unknown(s) and build rule(s) ---
         idx_unknown = res['idx_unknown']
 
+        _ts = time.perf_counter()
         if _pool is not None and min_rule_search:
             # ---- Parallel: pick up to n_workers unknowns and minimize concurrently ----
             n_pick = min(n_workers, len(idx_unknown))
@@ -2095,7 +2107,9 @@ def run_rule_extraction_by_mcs(
                 tasks.append((cst, None))
 
             results = _pool.map(_minimize_one_unknown, tasks)
+            _t_minimize = time.perf_counter() - _ts
 
+            _ts = time.perf_counter()
             for min_comps_st, sys_st, fval in results:
                 if sys_st >= sys_surv_st:
                     print("Survival sample found from sampling.")
@@ -2140,7 +2154,9 @@ def run_rule_extraction_by_mcs(
                     fval = info.get('final_sys_state', fval)
                 else:
                     min_comps_st = get_min_fail_comps_st(min_comps_st0, max_st=n_state-1, sys_fail_st=sys_surv_st-1)
+            _t_minimize = time.perf_counter() - _ts
 
+            _ts = time.perf_counter()
             if sys_st >= sys_surv_st:
                 print("Survival sample found from sampling.")
                 rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
@@ -2159,7 +2175,10 @@ def run_rule_extraction_by_mcs(
                 print(f"Updated sys_vals: {sys_val_list}")
 
         # ---- Periodic probability (bound) test via sampling ----
+        if _t_rules == 0.0:
+            _t_rules = time.perf_counter() - _ts
         probs_updated = False
+        _ts = time.perf_counter()
         if (n_round % prob_update_every) == 0:
             loops = max(n_sample // sample_batch_size, 1)
             c2 = {"survival": 0, "failure": 0, "unknown": 0}
@@ -2191,11 +2210,16 @@ def run_rule_extraction_by_mcs(
             probs_updated = True
 
         # ---- metrics for this round ----
+        _t_probs = time.perf_counter() - _ts
         rss_gb = psutil.Process().memory_info().rss / (1024**3)
         dt = time.perf_counter() - t0
         metrics_log.append({
             "round": n_round,
             "time_sec": dt,
+            "t_search": round(_t_search, 3),
+            "t_minimize": round(_t_minimize, 3),
+            "t_rules": round(_t_rules, 3),
+            "t_probs": round(_t_probs, 3),
             "n_rules_surv": int(len(rules_mat_surv)),
             "n_rules_fail": int(len(rules_mat_fail)),
             "probs_updated": probs_updated,
@@ -2205,7 +2229,7 @@ def run_rule_extraction_by_mcs(
             "n_sample_actual": n_sample_actual,
             "avg_len_surv": _avg_rule_len(rules_surv),
             "avg_len_fail": _avg_rule_len(rules_fail),
-            "rss_gb": rss_gb,   
+            "rss_gb": rss_gb,
         })
 
         if (n_round % save_every) == 0:
