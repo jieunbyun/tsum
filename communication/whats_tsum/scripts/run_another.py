@@ -179,305 +179,162 @@ def generate_random_network_data(name: str = "rg",
     return ds_root, rg_data
 
 
-@app.command()
-def example1(
-    n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
-    devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
-    n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
-    sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
-    max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
-    output_str: str = typer.Option("", help="str for output folder"),
+def _run_example(
+    name: str,
+    gen_params: dict,
+    devices: str,
+    n_workers: int,
+    n_sample: int,
+    sample_batch_size: int,
+    max_search_loops: int,
+    target_g_conn: int = 1,
+    min_g_conn: int = 0,
+    find_connected_graph: bool = True,
+    run_conn: bool = True,
+    run_global_conn: bool = True,
+    global_conn_dir: str = "tsum_global_conn",
+    save_every: int = 0,
+    seed: int = 7,
 ):
-
-   #brc_rss_max_gb = 20.0  # Max RSS for BRC in GB
-
-    # Generate a random network 
-    # smaller example
+    """Common logic for all examples."""
     generator = "rg"
-    name = "rg1" # Random Geometric Graph
-    gen_params1 = {"n_nodes": 60, "radius": 0.25, "p_fail": 0.05}
-    target_g_conn1 = 1
-    ds_root1, rg_data1 = generate_random_network_data(name, out_base=out_base,
-                                                    generator=generator,
-                                                    generator_params=gen_params1,
-                                                    target_g_conn=target_g_conn1,
-                                                    seed=7,
-                                                    find_connected_graph=False)
+    ds_root, rg_data = generate_random_network_data(
+        name, out_base=out_base,
+        generator=generator,
+        generator_params=gen_params,
+        target_g_conn=target_g_conn,
+        min_g_conn=min_g_conn,
+        seed=seed,
+        find_connected_graph=find_connected_graph,
+    )
 
-    edges1 = rg_data1['edges']
-    probs1 = rg_data1['probs']
-
-    # Run BRC algorithm on the generated data
-    """probs_brc1 = {e: {0: probs1[e]['0']['p'], 1: probs1[e]['1']['p']} for e in edges1}
-    brs1, rules1, sys_res1, monitor1 = brc.run(probs_brc1, rg_data1['sys_func_conn_brc'], 
-                                               max_rules=np.inf,
-                                               max_memory_gb=brc_rss_max_gb)
-    brc_path1 = Path(ds_root1 / "brc")
-    brc_path1_rel = brc_path1.relative_to(Path.cwd())
-    brc.save_brc_data(rules1, brs1, sys_res1, monitor1, output_folder = str(brc_path1_rel), fname_suffix='conn')
-    
-    del brs1, rules1, sys_res1, monitor1 # to not interfere with memory measurement of the next runs
-    gc.collect()
-    """
-     # Run TSUM
     device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
     device = torch.device(device_list[0] if device_list else ('cuda' if torch.cuda.is_available() else 'cpu'))
-    ## First example - 1OD connectivity
-    row_names = list(edges1.keys())
+    multi_devices = device_list if len(device_list) > 1 else None
 
-    n_state = 2  # binary states: 0, 1
-    probs = [[rg_data1['probs'][n]['0']['p'], rg_data1['probs'][n]['1']['p']] for n in row_names]
+    row_names = list(rg_data['edges'].keys())
+    n_state = 2
+    probs = [[rg_data['probs'][n]['0']['p'], rg_data['probs'][n]['1']['p']] for n in row_names]
     probs = torch.tensor(probs, dtype=torch.float32, device=device)
 
-    """
-    _ = tsum.run_rule_extraction_by_mcs(
-        # Problem-specific callables / data
-        sfun=rg_data1['sys_func_conn_tsum'],
+    common_kwargs = dict(
         probs=probs,
         row_names=row_names,
         n_state=n_state,
         sys_surv_st=1,
-        unk_prob_thres = 1e-5,
-        unk_prob_opt = 'abs',
-        output_dir=ds_root1 / "tsum_conn",
+        unk_prob_thres=1e-5,
+        unk_prob_opt='abs',
         n_sample=n_sample,
         sample_batch_size=sample_batch_size,
         max_search_loops=max_search_loops,
         n_workers=n_workers,
-        devices=device_list if len(device_list) > 1 else None,
+        devices=multi_devices,
     )
-    """
 
-    ## First example - Global connectivity
-    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next runs
-        # Problem-specific callables / data
-        sfun=rg_data1['sys_func_global_conn_tsum'],
-        probs=probs,
-        row_names=row_names,
-        n_state=n_state,
-        sys_surv_st=1,
-        unk_prob_thres = 1e-5,
-        unk_prob_opt = 'abs',
-        output_dir=ds_root1 / ('tsum_global' + output_str),
-        n_sample = n_sample,
-        sample_batch_size = sample_batch_size,
-        max_search_loops=max_search_loops,
-        n_workers=n_workers,
-        devices=device_list if len(device_list) > 1 else None,
+    if run_conn:
+        tsum.run_rule_extraction_by_mcs(
+            sfun=rg_data['sys_func_conn_tsum'],
+            output_dir=ds_root / "tsum_conn",
+            **common_kwargs,
+        )
+
+    if run_global_conn:
+        extra = {}
+        if save_every > 0:
+            extra['save_every'] = save_every
+        global_dir_name = global_conn_dir
+        tsum.run_rule_extraction_by_mcs(
+            sfun=rg_data['sys_func_global_conn_tsum'],
+            output_dir=ds_root / global_dir_name,
+            **common_kwargs,
+            **extra,
+        )
+
+
+# -- Common CLI options shared by all example commands --
+_common_opts = dict(
+    n_workers=typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
+    devices=typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
+    n_sample=typer.Option(10_000_000, help="Total number of samples for probability estimation"),
+    sample_batch_size=typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
+    max_search_loops=typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
+)
+
+
+@app.command()
+def example1(
+    n_workers: int = _common_opts['n_workers'],
+    devices: str = _common_opts['devices'],
+    n_sample: int = _common_opts['n_sample'],
+    sample_batch_size: int = _common_opts['sample_batch_size'],
+    max_search_loops: int = _common_opts['max_search_loops'],
+    output_str: str = typer.Option("", help="str for output folder"),
+):
+    _run_example(
+        name="rg1",
+        gen_params={"n_nodes": 60, "radius": 0.25, "p_fail": 0.05},
+        find_connected_graph=False,
+        run_conn=False,
+        global_conn_dir="tsum_global" + output_str,
+        devices=devices, n_workers=n_workers, n_sample=n_sample,
+        sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
     )
 
 
 @app.command()
 def example2(
-    n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
-    devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
-    n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
-    sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
-    max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
+    n_workers: int = _common_opts['n_workers'],
+    devices: str = _common_opts['devices'],
+    n_sample: int = _common_opts['n_sample'],
+    sample_batch_size: int = _common_opts['sample_batch_size'],
+    max_search_loops: int = _common_opts['max_search_loops'],
+    output_str: str = typer.Option("", help="str for output folder"),
 ):
-
-    # Larger example
-    generator = "rg"
-    name = "rg2" # Random Geometric Graph
-    gen_params2 = {"n_nodes": 120, "radius": 0.12, "p_fail": 0.05}
-    target_g_conn2 = 1
-    ds_root2, rg_data2 = generate_random_network_data(name, out_base=out_base,
-                                                    generator=generator,
-                                                    generator_params=gen_params2,
-                                                    target_g_conn=target_g_conn2,
-                                                    seed=7)
-    edges2 = rg_data2['edges']
-    probs2 = rg_data2['probs']
-
-    ## Second example - 1OD connectivity
-    row_names = list(edges2.keys())
-    n_state = 2  # binary states: 0, 1
-    device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
-    device = torch.device(device_list[0] if device_list else ('cuda' if torch.cuda.is_available() else 'cpu'))
-    probs = [[rg_data2['probs'][n]['0']['p'], rg_data2['probs'][n]['1']['p']] for n in row_names]
-    probs = torch.tensor(probs, dtype=torch.float32, device=device)
-    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
-        # Problem-specific callables / data
-        sfun=rg_data2['sys_func_conn_tsum'],
-        probs=probs,
-        row_names=row_names,
-        n_state=n_state,
-        sys_surv_st=1,
-        unk_prob_thres = 1e-5,
-        unk_prob_opt = 'abs',
-        output_dir=ds_root2 / "tsum_conn",
-        n_sample=n_sample,
-        sample_batch_size=sample_batch_size,
-        max_search_loops=max_search_loops,
-        n_workers=n_workers,
-        devices=device_list if len(device_list) > 1 else None,
-    )
-
-    ## Second example - Global connectivity
-    _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
-        # Problem-specific callables / data
-        sfun=rg_data2['sys_func_global_conn_tsum'],
-        probs=probs,
-        row_names=row_names,
-        n_state=n_state,
-        sys_surv_st=1,
-        unk_prob_thres = 1e-5,
-        unk_prob_opt = 'abs',
-        output_dir=ds_root2 / "tsum_global_conn",
-        n_sample=n_sample,
-        sample_batch_size=sample_batch_size,
-        max_search_loops=max_search_loops,
-        n_workers=n_workers,
-        devices=device_list if len(device_list) > 1 else None,
+    _run_example(
+        name="rg2",
+        gen_params={"n_nodes": 120, "radius": 0.12, "p_fail": 0.05},
+        global_conn_dir="tsum_global_conn" + output_str,
+        devices=devices, n_workers=n_workers, n_sample=n_sample,
+        sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
     )
 
 
 @app.command()
 def example3(
-    n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
-    devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
-    n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
-    sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
-    max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
+    n_workers: int = _common_opts['n_workers'],
+    devices: str = _common_opts['devices'],
+    n_sample: int = _common_opts['n_sample'],
+    sample_batch_size: int = _common_opts['sample_batch_size'],
+    max_search_loops: int = _common_opts['max_search_loops'],
+    output_str: str = typer.Option("", help="str for output folder"),
 ):
-
-    # example in between (1)
-    generator = "rg"
-    name = "rg3" # Random Geometric Graph
-    gen_params3 = {"n_nodes": 80, "radius": 0.20, "p_fail": 0.05}
-    target_g_conn3 = 1
-
-    ds_root3, rg_data3 = generate_random_network_data(name, out_base=out_base,
-                                                    generator=generator,
-                                                    generator_params=gen_params3,
-                                                    target_g_conn=target_g_conn3,
-                                                    seed=7)
-
-    ## Third example - 1OD connectivity
-    edges3 = rg_data3['edges']
-    row_names = list(edges3.keys())
-
-    n_state = 2  # binary states: 0, 1
-    device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
-    device = torch.device(device_list[0] if device_list else ('cuda' if torch.cuda.is_available() else 'cpu'))
-    probs = [[rg_data3['probs'][n]['0']['p'], rg_data3['probs'][n]['1']['p']] for n in row_names]
-    probs = torch.tensor(probs, dtype=torch.float32, device=device)
-    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
-        # Problem-specific callables / data
-        sfun=rg_data3['sys_func_conn_tsum'],
-        probs=probs,
-        row_names=row_names,
-        n_state=n_state,
-        sys_surv_st=1,
-        unk_prob_thres = 1e-5,
-        unk_prob_opt = 'abs',
-        output_dir=ds_root3 / "tsum_conn",
-        n_sample=n_sample,
-        sample_batch_size=sample_batch_size,
-        max_search_loops=max_search_loops,
-        n_workers=n_workers,
-        devices=device_list if len(device_list) > 1 else None,
-    )
-
-    ## Third example - Global connectivity
-    _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
-        # Problem-specific callables / data
-        sfun=rg_data3['sys_func_global_conn_tsum'],
-        probs=probs,
-        row_names=row_names,
-        n_state=n_state,
-        sys_surv_st=1,
-        unk_prob_thres = 1e-5,
-        unk_prob_opt = 'abs',
-        output_dir=ds_root3 / "tsum_global_conn",
-        n_sample=n_sample,
-        sample_batch_size=sample_batch_size,
-        max_search_loops=max_search_loops,
-        n_workers=n_workers,
-        devices=device_list if len(device_list) > 1 else None,
+    _run_example(
+        name="rg3",
+        gen_params={"n_nodes": 80, "radius": 0.20, "p_fail": 0.05},
+        global_conn_dir="tsum_global_conn" + output_str,
+        devices=devices, n_workers=n_workers, n_sample=n_sample,
+        sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
     )
 
 
 @app.command()
 def example4(
-    n_workers: int = typer.Option(1, help="Number of CPU workers for parallel sfun + minimization"),
-    devices: str = typer.Option("", help="Comma-separated GPU devices for multi-GPU sampling, e.g. 'cuda:0,cuda:1'. Empty = single device."),
-    n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
-    sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
-    max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
+    n_workers: int = _common_opts['n_workers'],
+    devices: str = _common_opts['devices'],
+    n_sample: int = _common_opts['n_sample'],
+    sample_batch_size: int = _common_opts['sample_batch_size'],
+    max_search_loops: int = _common_opts['max_search_loops'],
+    output_str: str = typer.Option("", help="str for output folder"),
 ):
-
-    # example in between (2)
-    generator = "rg"
-    name = "rg4" # Random Geometric Graph
-    gen_params4 = {"n_nodes": 100, "radius": 0.16, "p_fail": 0.05}
-    target_g_conn4 = 1
-    ds_root4, rg_data4 = generate_random_network_data(name, out_base=out_base,
-                                                    generator=generator,
-                                                    generator_params=gen_params4,
-                                                    target_g_conn=target_g_conn4,
-                                                    min_g_conn=2,
-                                                    seed=7)
-
-    ## Fourth example - 1OD connectivity
-    edges4 = rg_data4['edges']
-    row_names = list(edges4.keys())
-
-    n_state = 2  # binary states: 0, 1
-    device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
-    device = torch.device(device_list[0] if device_list else ('cuda' if torch.cuda.is_available() else 'cpu'))
-    probs = [[rg_data4['probs'][n]['0']['p'], rg_data4['probs'][n]['1']['p']] for n in row_names]
-    probs = torch.tensor(probs, dtype=torch.float32, device=device)
-
-    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
-        # Problem-specific callables / data
-        sfun=rg_data4['sys_func_conn_tsum'],
-        probs=probs,
-        row_names=row_names,
-        n_state=n_state,
-        sys_surv_st=1,
-        unk_prob_thres = 1e-5,
-        unk_prob_opt = 'abs',
-        output_dir=ds_root4 / "tsum_conn",
-        n_sample=n_sample,
-        sample_batch_size=sample_batch_size,
-        max_search_loops=max_search_loops,
-        n_workers=n_workers,
-        devices=device_list if len(device_list) > 1 else None,
-    )
-
-    ## Fourth example - Global connectivity
-    _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
-        # Problem-specific callables / data
-        sfun=rg_data4['sys_func_global_conn_tsum'],
-        probs=probs,
-        row_names=row_names,
-        n_state=n_state,
-        sys_surv_st=1,
-        unk_prob_thres = 1e-5,
-        unk_prob_opt = 'abs',
-        output_dir=ds_root4 / "tsum_global_conn",
+    _run_example(
+        name="rg4",
+        gen_params={"n_nodes": 100, "radius": 0.16, "p_fail": 0.05},
+        min_g_conn=2,
         save_every=10000,
-        n_sample=n_sample,
-        sample_batch_size=sample_batch_size,
-        max_search_loops=max_search_loops,
-        n_workers=n_workers,
-        devices=device_list if len(device_list) > 1 else None,
+        global_conn_dir="tsum_global_conn" + output_str,
+        devices=devices, n_workers=n_workers, n_sample=n_sample,
+        sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
     )
-
-    """
-    probs_brc2 = {e: {0: probs2[e]['0']['p'], 1: probs2[e]['1']['p']} for e in edges2}
-
-    brs2, rules2, sys_res2, monitor2 = brc.run(probs_brc2, rg_data2['sys_func_conn_brc'], 
-                                               max_rules=np.inf,
-                                               max_memory_gb=brc_rss_max_gb)
-    brc_path2 = Path(ds_root2 / "brc")
-    brc_path2_rel = brc_path2.relative_to(Path.cwd())
-    brc.save_brc_data(rules2, brs2, sys_res2, monitor2, output_folder = str(brc_path2_rel), fname_suffix='conn')
-
-    del brs2, rules2, sys_res2, monitor2 # to not interfere with memory measurement of the next runs
-    gc.collect()
-    """
 
 
 
