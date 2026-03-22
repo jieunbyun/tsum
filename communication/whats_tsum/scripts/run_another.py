@@ -183,7 +183,7 @@ def generate_random_network_data(name: str = "rg",
         "dest": dest[0],
         "sys_func_conn_brc": brc_wrapper(sys_func_conn),
         "sys_func_global_conn_brc": brc_wrapper(sys_func_global_conn),
-        "sys_func_conn_tsum": tsum_wrapper(sys_func_conn) if not use_igraph else sys_func_conn,
+        "sys_func_conn_tsum": tsum_wrapper(sys_func_conn),
         "sys_func_global_conn_tsum": tsum_wrapper(sys_func_global_conn) if not use_igraph else sys_func_global_conn,
         "graph": G
     }

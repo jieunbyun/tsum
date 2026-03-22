@@ -7,6 +7,7 @@ for connectivity computations.
 
 Requires: pip install python-igraph
 """
+import warnings
 import igraph as ig
 import networkx as nx
 from typing import Dict, Tuple, Any, Optional, List
@@ -116,7 +117,9 @@ def eval_1od_connectivity_igraph(
     dest_idx = node_to_idx[dest_node]
 
     # Check connectivity and find shortest path
-    paths = H.get_shortest_paths(orig_idx, to=dest_idx, output="vpath")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Couldn't reach some vertices")
+        paths = H.get_shortest_paths(orig_idx, to=dest_idx, output="vpath")
     path_v = paths[0] if paths else []
 
     if path_v:
