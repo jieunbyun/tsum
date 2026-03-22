@@ -1262,6 +1262,101 @@ def update_rules(min_comps_st, rules_dict, rules_mat, row_names, verbose=False):
 
     return rules_dict, rules_mat
 
+
+def update_rules_batch(new_rules_dicts, rules_dict, rules_mat, row_names, verbose=False):
+    """
+    Batch version of update_rules: process multiple new rules at once.
+
+    Instead of calling is_subset N times (each against a growing rules_mat),
+    this does:
+      1. Convert all new rules to matrices in one pass
+      2. One batched dominance check: new vs existing
+      3. One batched dominance check: new vs new (inter-batch)
+      4. Filter and append all surviving rules at once
+
+    Returns:
+        (rules_dict, rules_mat, n_added, n_removed)
+    """
+    if not new_rules_dicts:
+        return rules_dict, rules_mat, 0, 0
+
+    n_existing, n_var, n_state = rules_mat.shape
+    device = rules_mat.device
+
+    # Step 1: convert all new rules to matrices
+    new_mats = []
+    for rd in new_rules_dicts:
+        new_mats.append(from_rule_dict_to_mat(rd, row_names, n_state))
+    new_batch = torch.stack(new_mats, dim=0)  # (N_new, n_var, n_state)
+    n_new = new_batch.shape[0]
+
+    # Step 2: check new vs existing
+    # For each new rule, is it dominated by any existing rule?
+    # For each existing rule, is it dominated by any new rule?
+    # new_batch: (N_new, n_var, n_state), rules_mat: (N_ex, n_var, n_state)
+    new_dominated = torch.zeros(n_new, dtype=torch.bool, device=device)
+    existing_dominated = torch.zeros(n_existing, dtype=torch.bool, device=device)
+
+    if n_existing > 0 and n_new > 0:
+        # Chunk over existing rules to bound memory: (N_new, chunk, n_var, n_state)
+        # With N_new=96, chunk=8000, n_var=120, n_state=2: ~180MB per chunk
+        chunk_size = max(1, 500_000_000 // (n_new * n_var * n_state * 4))  # ~500MB limit
+        for c_start in range(0, n_existing, chunk_size):
+            c_end = min(c_start + chunk_size, n_existing)
+            ex_chunk = rules_mat[c_start:c_end]  # (chunk, n_var, n_state)
+            new_exp = new_batch.unsqueeze(1)      # (N_new, 1, n_var, n_state)
+            ex_exp = ex_chunk.unsqueeze(0)        # (1, chunk, n_var, n_state)
+            intersect = new_exp & ex_exp          # (N_new, chunk, n_var, n_state)
+
+            # new[i] dominated by existing[j]?
+            new_eq = (new_exp == intersect).all(dim=(2, 3))  # (N_new, chunk)
+            new_dominated |= new_eq.any(dim=1)
+
+            # existing[j] dominated by new[i]?
+            ex_eq = (ex_exp == intersect).all(dim=(2, 3))    # (N_new, chunk)
+            existing_dominated[c_start:c_end] |= ex_eq.any(dim=0)
+
+    # Step 3: among surviving new rules, check inter-dominance
+    surviving_new_idx = torch.where(~new_dominated)[0]
+    if len(surviving_new_idx) > 1:
+        surv_batch = new_batch[surviving_new_idx]  # (M, n_var, n_state)
+        M = surv_batch.shape[0]
+        s_exp_i = surv_batch.unsqueeze(1)  # (M, 1, n_var, n_state)
+        s_exp_j = surv_batch.unsqueeze(0)  # (1, M, n_var, n_state)
+        s_inter = s_exp_i & s_exp_j        # (M, M, n_var, n_state)
+        # i is subset of j: s_exp_i == s_inter
+        i_sub_j = (s_exp_i == s_inter).all(dim=(2, 3))  # (M, M)
+        # Mask diagonal (rule is always subset of itself)
+        i_sub_j.fill_diagonal_(False)
+        # If rule i is a subset of rule j (for any j), rule i is dominated
+        inter_dominated = i_sub_j.any(dim=1)  # (M,)
+        # Map back: mark dominated ones
+        dominated_in_surviving = surviving_new_idx[inter_dominated]
+        new_dominated[dominated_in_surviving] = True
+
+    # Step 4: filter existing, append surviving new
+    keep_existing = ~existing_dominated
+    keep_new = ~new_dominated
+
+    n_removed = int(existing_dominated.sum().item())
+    n_added = int(keep_new.sum().item())
+
+    rules_mat = torch.cat([
+        rules_mat[keep_existing],
+        new_batch[keep_new],
+    ], dim=0)
+
+    rules_dict = [r for r, k in zip(rules_dict, keep_existing.tolist()) if k]
+    for i, rd in enumerate(new_rules_dicts):
+        if keep_new[i]:
+            rules_dict.append(rd)
+
+    if verbose:
+        print(f"Batch update: {n_added} rules added, {n_removed} existing rules removed "
+              f"({n_new - n_added} new rules dominated)")
+
+    return rules_dict, rules_mat, n_added, n_removed
+
 def run_rule_extraction(
     *,
     # Problem-specific callables / data
@@ -2110,23 +2205,34 @@ def run_rule_extraction_by_mcs(
             _t_minimize = time.perf_counter() - _ts
 
             _ts = time.perf_counter()
+            # Separate results into survival and failure batches
+            new_surv_dicts = []
+            new_fail_dicts = []
             for min_comps_st, sys_st, fval in results:
                 if sys_st >= sys_surv_st:
-                    print("Survival sample found from sampling.")
-                    rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
+                    new_surv_dicts.append(min_comps_st)
                 else:
-                    print("Failure sample found from sampling.")
-                    rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
-
-                print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_sample_actual}.")
-                print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
+                    new_fail_dicts.append(min_comps_st)
 
                 if isinstance(fval, float):
                     fval = int(round(fval * 1000)) / 1000.0
                 if fval not in sys_val_list:
                     sys_val_list.append(fval)
                     sys_val_list.sort(key=mixed_sort_key)
-                    print(f"Updated sys_vals: {sys_val_list}")
+
+            # Batch update: one dominance check per type instead of N sequential ones
+            if new_surv_dicts:
+                rules_surv, rules_mat_surv, n_add, n_rem = update_rules_batch(
+                    new_surv_dicts, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
+                print(f"Survival: {n_add} rules added, {n_rem} removed (from {len(new_surv_dicts)} candidates)")
+            if new_fail_dicts:
+                rules_fail, rules_mat_fail, n_add, n_rem = update_rules_batch(
+                    new_fail_dicts, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
+                print(f"Failure: {n_add} rules added, {n_rem} removed (from {len(new_fail_dicts)} candidates)")
+
+            if sys_val_list:
+                sys_val_list.sort(key=mixed_sort_key)
+                print(f"Updated sys_vals: {sys_val_list}")
 
         else:
             # ---- Serial (original): pick one unknown ----

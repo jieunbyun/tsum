@@ -1071,6 +1071,78 @@ def test_update_rules4(ex_surv_fail_rules_with_dict):
     assert rules_dict == expected_rules_dict, f"Expected {expected_rules_dict}, but got {rules_dict}"
     assert torch.equal(rules_mat, expected_rules_mat), f"Expected {expected_rules_mat}, but got {rules_mat}"
 
+
+def test_update_rules_batch_matches_sequential(ex_surv_fail_rules_with_dict):
+    """Batch update_rules should produce same results as sequential calls."""
+    rules_mat_surv, rules_mat_fail, rules_surv, rules_fail, row_names = ex_surv_fail_rules_with_dict
+
+    # Two new rules to add sequentially
+    new_rules = [
+        {'x1': ('<=', 0), 'x3': ('<=', 0), 'sys': ('<=', 0)},
+        {'x2': ('<=', 0), 'x3': ('<=', 0), 'x4': ('<=', 0), 'sys': ('<=', 0)},
+    ]
+
+    # Sequential: apply update_rules one by one
+    seq_dict = list(rules_fail)
+    seq_mat = rules_mat_fail.clone()
+    for rd in new_rules:
+        seq_dict, seq_mat = tsum.update_rules(rd, seq_dict, seq_mat, row_names)
+
+    # Batch: apply all at once
+    batch_dict, batch_mat, n_added, n_removed = tsum.update_rules_batch(
+        new_rules, list(rules_fail), rules_mat_fail.clone(), row_names)
+
+    # Both should have the same rules (order may differ, so compare as sets of tuples)
+    seq_set = {tuple(sorted(d.items())) for d in seq_dict}
+    batch_set = {tuple(sorted(d.items())) for d in batch_dict}
+    assert seq_set == batch_set, f"Dicts differ:\nseq={seq_set}\nbatch={batch_set}"
+
+    # Matrices should match (compare sorted by content)
+    seq_sorted = seq_mat[seq_mat.sum(dim=(1, 2)).argsort()]
+    batch_sorted = batch_mat[batch_mat.sum(dim=(1, 2)).argsort()]
+    assert torch.equal(seq_sorted, batch_sorted), f"Mats differ"
+
+
+def test_update_rules_batch_empty_existing(ex_surv_fail_rules_with_dict):
+    """Batch update with no existing rules."""
+    _, _, _, _, row_names = ex_surv_fail_rules_with_dict
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    empty_mat = torch.zeros((0, len(row_names), 3), dtype=torch.int32, device=device)
+    new_rules = [
+        {'x1': ('<=', 0), 'sys': ('<=', 0)},
+        {'x2': ('>=', 2), 'sys': ('>=', 1)},
+    ]
+
+    rules_dict, rules_mat, n_added, n_removed = tsum.update_rules_batch(
+        new_rules, [], empty_mat, row_names)
+
+    assert n_added == 2
+    assert n_removed == 0
+    assert len(rules_dict) == 2
+    assert rules_mat.shape[0] == 2
+
+
+def test_update_rules_batch_new_dominated_by_new():
+    """When a new rule dominates another new rule, only the dominator survives."""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    row_names = ['x1', 'x2']
+    empty_mat = torch.zeros((0, 2, 2), dtype=torch.int32, device=device)
+
+    new_rules = [
+        {'x1': ('<=', 0), 'x2': ('<=', 0), 'sys': ('<=', 0)},  # more specific
+        {'x1': ('<=', 0), 'sys': ('<=', 0)},  # less specific (dominates the above)
+    ]
+
+    rules_dict, rules_mat, n_added, n_removed = tsum.update_rules_batch(
+        new_rules, [], empty_mat, row_names)
+
+    assert n_added == 1
+    assert len(rules_dict) == 1
+    # The less specific rule should survive (it dominates the more specific one)
+    assert 'x2' not in rules_dict[0] or rules_dict[0].get('x2', (None, None))[1] != 0
+
+
 @pytest.fixture
 def surv_fail_rules_ex_4comps():
     surv_rules = [{'x1': ('>=', 1), 'x2': ('>=', 2), 'x3': ('>=', 1), 'x4': ('>=', 2), 'sys': ('>=', 1)},
