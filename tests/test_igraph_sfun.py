@@ -44,12 +44,13 @@ class TestNxToIgraph:
         from tsum.igraph_sfun import nx_to_igraph
 
         G = _make_test_graph()
-        ig_g, node_to_idx, eid_to_edge_idx = nx_to_igraph(G)
+        ig_g, node_to_idx, eid_to_edge_idx, edge_endpoints = nx_to_igraph(G)
 
         assert ig_g.vcount() == G.number_of_nodes()
         assert ig_g.ecount() == G.number_of_edges()
         assert set(node_to_idx.keys()) == set(G.nodes())
         assert set(eid_to_edge_idx.keys()) == {"e1", "e2", "e3", "e4"}
+        assert set(edge_endpoints.keys()) == {"e1", "e2", "e3", "e4"}
 
 
 class TestGlobalConnectivity:
