@@ -1326,10 +1326,17 @@ def update_rules_batch(new_rules_dicts, rules_dict, rules_mat, row_names, verbos
         s_inter = s_exp_i & s_exp_j        # (M, M, n_var, n_state)
         # i is subset of j: s_exp_i == s_inter
         i_sub_j = (s_exp_i == s_inter).all(dim=(2, 3))  # (M, M)
-        # Mask diagonal (rule is always subset of itself)
+        j_sub_i = (s_exp_j == s_inter).all(dim=(2, 3))  # (M, M)
+        # Mask diagonal
         i_sub_j.fill_diagonal_(False)
-        # If rule i is a subset of rule j (for any j), rule i is dominated
-        inter_dominated = i_sub_j.any(dim=1)  # (M,)
+        j_sub_i.fill_diagonal_(False)
+        # Strict dominance: j dominates i (i⊂j but j⊄i)
+        strict = i_sub_j & ~j_sub_i
+        # Equal rules (i⊂j AND j⊂i): tiebreak by index — only j<i can dominate i
+        equal = i_sub_j & j_sub_i
+        lower_mask = torch.tril(torch.ones(M, M, dtype=torch.bool, device=device), diagonal=-1)
+        # Rule i is dominated if strictly dominated by any j, or equal to some j<i
+        inter_dominated = strict.any(dim=1) | (equal & lower_mask).any(dim=1)  # (M,)
         # Map back: mark dominated ones
         dominated_in_surviving = surviving_new_idx[inter_dominated]
         new_dominated[dominated_in_surviving] = True

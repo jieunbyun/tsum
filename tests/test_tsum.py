@@ -1143,6 +1143,23 @@ def test_update_rules_batch_new_dominated_by_new():
     assert 'x2' not in rules_dict[0] or rules_dict[0].get('x2', (None, None))[1] != 0
 
 
+def test_update_rules_batch_duplicate_rules():
+    """Duplicate rules should not eliminate each other — one copy must survive."""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    row_names = ['x1', 'x2']
+    empty_mat = torch.zeros((0, 2, 2), dtype=torch.int32, device=device)
+
+    rule = {'x1': ('<=', 0), 'sys': ('<=', 0)}
+    new_rules = [dict(rule), dict(rule), dict(rule)]  # 3 identical rules
+
+    rules_dict, rules_mat, n_added, n_removed = tsum.update_rules_batch(
+        new_rules, [], empty_mat, row_names)
+
+    assert n_added == 1, f"Expected 1 rule added from 3 duplicates, got {n_added}"
+    assert len(rules_dict) == 1
+    assert rules_mat.shape[0] == 1
+
+
 @pytest.fixture
 def surv_fail_rules_ex_4comps():
     surv_rules = [{'x1': ('>=', 1), 'x2': ('>=', 2), 'x3': ('>=', 1), 'x4': ('>=', 2), 'sys': ('>=', 1)},
