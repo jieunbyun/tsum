@@ -12,9 +12,44 @@ from torch import Tensor
 import psutil
 
 import random
+import multiprocessing as mp
 from collections import deque
 
 import tsum
+
+# ---- Shared state for parallel worker processes (inherited via fork) ----
+_MP_SFUN = None
+_MP_SYS_SURV_ST = None
+_MP_N_STATE = None
+
+
+def _minimize_one_unknown(args):
+    """
+    Worker function for parallel minimization of unknown samples.
+    Accesses module-level shared state set before the pool is created.
+    """
+    comps_st_test, fval = args
+    sfun = _MP_SFUN
+    sys_surv_st = _MP_SYS_SURV_ST
+    n_state = _MP_N_STATE
+
+    fval, sys_st, min_comps_st0 = sfun(comps_st_test)
+    if min_comps_st0 is None:
+        min_comps_st0 = comps_st_test.copy()
+    elif isinstance(next(iter(min_comps_st0.values())), tuple):
+        min_comps_st0 = {k: v[1] for k, v in min_comps_st0.items()}
+
+    if sys_st >= sys_surv_st:
+        min_comps_st, info = minimise_surv_states_random(
+            min_comps_st0, sfun, sys_surv_st=sys_surv_st, fval=fval)
+        fval = info.get('final_sys_state', fval)
+    else:
+        min_comps_st, info = minimise_fail_states_random(
+            min_comps_st0, sfun, max_state=n_state - 1,
+            sys_fail_st=sys_surv_st - 1, fval=fval)
+        fval = info.get('final_sys_state', fval)
+
+    return min_comps_st, sys_st, fval
 
 # For use in mixted sorting 
 try:
@@ -1111,6 +1146,20 @@ def classify_samples(samples, survival_rules, failure_rules):
     }
     return counts
 
+def _sample_and_classify_on_device(args):
+    """
+    Sample + classify on a single GPU device. Used by multi-GPU sampling.
+    Runs in a thread — GPU ops release the GIL during kernel execution.
+    """
+    probs_dev, n_sample, rules_surv_dev, rules_fail_dev, with_indices = args
+    samples = sample_categorical(probs_dev, n_sample)
+    if with_indices:
+        res = classify_samples_with_indices(samples, rules_surv_dev, rules_fail_dev, return_masks=True)
+    else:
+        res = classify_samples(samples, rules_surv_dev, rules_fail_dev)
+    return samples, res
+
+
 def sample_categorical(probs, n_sample):
     """
     Sample binary event tensors from categorical distributions.
@@ -1804,8 +1853,12 @@ def run_rule_extraction_by_mcs(
     save_every: int = 10,
     n_sample: int = 10_000_000,
     sample_batch_size: int = 100_000,
+    max_search_loops: int = 0,  # max batches per round for searching unknowns (0 = use n_sample // sample_batch_size)
     min_rule_search: bool = True,
     rule_update_verbose: bool = True,
+    # Parallelism
+    n_workers: int = 1,  # number of CPU workers for parallel sfun + minimization
+    devices: Optional[List[str]] = None,  # list of GPU devices for multi-GPU sampling, e.g. ["cuda:0", "cuda:1"]
     # Output control
     output_dir: str = "tsum_res",
     surv_json_name: str = None,
@@ -1869,7 +1922,33 @@ def run_rule_extraction_by_mcs(
     is_new_cand = True
     last_probs = {"survival": 0.0, "failure": 0.0, "unknown": 1.0}
 
+    # ---- parallel worker pool (fork-based, inherits sfun via global) ----
+    global _MP_SFUN, _MP_SYS_SURV_ST, _MP_N_STATE
+    _pool = None
+    if n_workers > 1:
+        _MP_SFUN = sfun
+        _MP_SYS_SURV_ST = sys_surv_st
+        _MP_N_STATE = n_state
+        _ctx = mp.get_context('fork')
+        _pool = _ctx.Pool(n_workers)
+        print(f"Parallel mode: {n_workers} CPU workers for sfun + minimization")
+
+    # ---- multi-GPU setup ----
+    _use_multi_gpu = False
+    _gpu_devices = []
+    _gpu_probs = []       # probs replicated to each device
+    _gpu_thread_pool = None
+    if devices is not None and len(devices) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        _gpu_devices = [torch.device(d) for d in devices]
+        _gpu_probs = [probs.to(d) for d in _gpu_devices]
+        _gpu_thread_pool = ThreadPoolExecutor(max_workers=len(_gpu_devices))
+        _use_multi_gpu = True
+        print(f"Multi-GPU mode: sampling across {devices}")
+
     total_loops = max(n_sample // sample_batch_size, 1)
+    # Search loops: capped for finding unknowns; full total_loops used only for probability estimation
+    search_loops = min(max_search_loops, total_loops) if max_search_loops > 0 else total_loops
 
     # ---- main loop ----
     while is_new_cand and (unk_prob > unk_prob_thres if unk_prob_opt == "abs" else unk_prob / (min([last_probs["failure"]+1e-12, last_probs["survival"]+1e-12])) > unk_prob_thres):
@@ -1889,13 +1968,39 @@ def run_rule_extraction_by_mcs(
         samples = None
         i = -1
 
-        for i in range(total_loops):
-            samples = sample_categorical(probs, sample_batch_size)  # (B, n_var, n_state)
-            res = classify_samples_with_indices(samples, rules_mat_surv, rules_mat_fail, return_masks=True)
+        for i in range(search_loops):
+            if _use_multi_gpu:
+                # Split batch across GPUs, sample + classify in parallel threads
+                n_gpus = len(_gpu_devices)
+                per_gpu = sample_batch_size // n_gpus
+                remainder = sample_batch_size % n_gpus
+                tasks = []
+                for gi in range(n_gpus):
+                    n_gi = per_gpu + (1 if gi < remainder else 0)
+                    rules_s_gi = rules_mat_surv.to(_gpu_devices[gi])
+                    rules_f_gi = rules_mat_fail.to(_gpu_devices[gi])
+                    tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, True))
 
-            counts["survival"] += int(res["survival"])
-            counts["failure"]  += int(res["failure"])
-            counts["unknown"]  += int(res["unknown"])   # FIX: track unknowns too
+                futures = list(_gpu_thread_pool.map(_sample_and_classify_on_device, tasks))
+
+                # Merge results back to primary device
+                all_samples = []
+                for samples_gi, res_gi in futures:
+                    all_samples.append(samples_gi.to(device))
+                    counts["survival"] += int(res_gi["survival"])
+                    counts["failure"]  += int(res_gi["failure"])
+                    counts["unknown"]  += int(res_gi["unknown"])
+                samples = torch.cat(all_samples, dim=0)
+
+                # Re-classify merged batch on primary device for correct indices
+                res = classify_samples_with_indices(samples, rules_mat_surv, rules_mat_fail, return_masks=True)
+            else:
+                samples = sample_categorical(probs, sample_batch_size)  # (B, n_var, n_state)
+                res = classify_samples_with_indices(samples, rules_mat_surv, rules_mat_fail, return_masks=True)
+
+                counts["survival"] += int(res["survival"])
+                counts["failure"]  += int(res["failure"])
+                counts["unknown"]  += int(res["unknown"])
 
             if res['idx_unknown'].numel() > 0:
                 is_new_cand = True
@@ -1910,15 +2015,32 @@ def run_rule_extraction_by_mcs(
         # If no unknowns found, skip candidate creation and continue to periodic update / exit
         if not is_new_cand:
             probs_updated = False
-            if (n_round % prob_update_every) == 0:
+            # When search is capped, the unk_prob estimate from search_loops is rough;
+            # force a full probability update to get an accurate termination check.
+            needs_full_estimate = (search_loops < total_loops) or (n_round % prob_update_every) == 0
+            if needs_full_estimate:
                 # refresh with a full estimate
                 loops = max(n_sample // sample_batch_size, 1)
                 c2 = {"survival": 0, "failure": 0, "unknown": 0}
                 for _ in range(loops):
-                    s = sample_categorical(probs, sample_batch_size)
-                    ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
-                    for k in c2:
-                        c2[k] += ci[k]
+                    if _use_multi_gpu:
+                        n_gpus = len(_gpu_devices)
+                        per_gpu = sample_batch_size // n_gpus
+                        remainder = sample_batch_size % n_gpus
+                        tasks = []
+                        for gi in range(n_gpus):
+                            n_gi = per_gpu + (1 if gi < remainder else 0)
+                            rules_s_gi = rules_mat_surv.to(_gpu_devices[gi])
+                            rules_f_gi = rules_mat_fail.to(_gpu_devices[gi])
+                            tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, False))
+                        for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
+                            for k in c2:
+                                c2[k] += ci[k]
+                    else:
+                        s = sample_categorical(probs, sample_batch_size)
+                        ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
+                        for k in c2:
+                            c2[k] += ci[k]
                 sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
                 print("---")
                 print(f"Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
@@ -1956,50 +2078,85 @@ def run_rule_extraction_by_mcs(
 
             continue  # go to next while-check (likely exit if unk_prob <= thresh)
 
-        # --- We have unknowns: extract a random unknown and build a rule ---
+        # --- We have unknowns: extract unknown(s) and build rule(s) ---
         idx_unknown = res['idx_unknown']
-        rand_idx = idx_unknown[torch.randint(len(idx_unknown), (1,))].item()
-        sample0 = samples[rand_idx]  # (n_var, n_state)
 
-        states = torch.argmax(sample0, dim=1).tolist()
-        comps_st_test = {row_names[k]: int(states[k]) for k in range(n_vars)}  # exclude system var
+        if _pool is not None and min_rule_search:
+            # ---- Parallel: pick up to n_workers unknowns and minimize concurrently ----
+            n_pick = min(n_workers, len(idx_unknown))
+            perm = torch.randperm(len(idx_unknown))[:n_pick]
+            picked_indices = idx_unknown[perm]
 
-        fval, sys_st, min_comps_st0 = sfun(comps_st_test)
-        if min_comps_st0 is None: # if no reference state is provided, use the component state as a reference state
-            min_comps_st0 = comps_st_test.copy()
-        elif isinstance(next(iter(min_comps_st0.values())), tuple): 
-            # if reference state is provided as ('>=' or '<=', int) for each component, take only the int state
-            min_comps_st0 = {k: v[1] for k, v in min_comps_st0.items()}
+            tasks = []
+            for idx_i in picked_indices:
+                s0 = samples[idx_i.item()]
+                sts = torch.argmax(s0, dim=1).tolist()
+                cst = {row_names[k]: int(sts[k]) for k in range(n_vars)}
+                tasks.append((cst, None))
 
-        if sys_st >= sys_surv_st:
-            if min_rule_search:
-                min_comps_st, info = minimise_surv_states_random(min_comps_st0, sfun, sys_surv_st=sys_surv_st, fval=fval)
-                fval = info.get('final_sys_state', fval)
-            else:
-                min_comps_st = get_min_surv_comps_st(min_comps_st0, sys_surv_st=sys_surv_st)
+            results = _pool.map(_minimize_one_unknown, tasks)
+
+            for min_comps_st, sys_st, fval in results:
+                if sys_st >= sys_surv_st:
+                    print("Survival sample found from sampling.")
+                    rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
+                else:
+                    print("Failure sample found from sampling.")
+                    rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
+
+                print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_sample_actual}.")
+                print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
+
+                if isinstance(fval, float):
+                    fval = int(round(fval * 1000)) / 1000.0
+                if fval not in sys_val_list:
+                    sys_val_list.append(fval)
+                    sys_val_list.sort(key=mixed_sort_key)
+                    print(f"Updated sys_vals: {sys_val_list}")
+
         else:
-            if min_rule_search:
-                min_comps_st, info = minimise_fail_states_random(min_comps_st0, sfun, max_state=n_state-1, sys_fail_st=sys_surv_st-1, fval=fval)
-                fval = info.get('final_sys_state', fval)
+            # ---- Serial (original): pick one unknown ----
+            rand_idx = idx_unknown[torch.randint(len(idx_unknown), (1,))].item()
+            sample0 = samples[rand_idx]  # (n_var, n_state)
+
+            states = torch.argmax(sample0, dim=1).tolist()
+            comps_st_test = {row_names[k]: int(states[k]) for k in range(n_vars)}
+
+            fval, sys_st, min_comps_st0 = sfun(comps_st_test)
+            if min_comps_st0 is None:
+                min_comps_st0 = comps_st_test.copy()
+            elif isinstance(next(iter(min_comps_st0.values())), tuple):
+                min_comps_st0 = {k: v[1] for k, v in min_comps_st0.items()}
+
+            if sys_st >= sys_surv_st:
+                if min_rule_search:
+                    min_comps_st, info = minimise_surv_states_random(min_comps_st0, sfun, sys_surv_st=sys_surv_st, fval=fval)
+                    fval = info.get('final_sys_state', fval)
+                else:
+                    min_comps_st = get_min_surv_comps_st(min_comps_st0, sys_surv_st=sys_surv_st)
             else:
-                min_comps_st = get_min_fail_comps_st(min_comps_st0, max_st=n_state-1, sys_fail_st=sys_surv_st-1)
+                if min_rule_search:
+                    min_comps_st, info = minimise_fail_states_random(min_comps_st0, sfun, max_state=n_state-1, sys_fail_st=sys_surv_st-1, fval=fval)
+                    fval = info.get('final_sys_state', fval)
+                else:
+                    min_comps_st = get_min_fail_comps_st(min_comps_st0, max_st=n_state-1, sys_fail_st=sys_surv_st-1)
 
-        if sys_st >= sys_surv_st:
-            print("Survival sample found from sampling.")
-            rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
-        else:
-            print("Failure sample found from sampling.")
-            rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
+            if sys_st >= sys_surv_st:
+                print("Survival sample found from sampling.")
+                rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
+            else:
+                print("Failure sample found from sampling.")
+                rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
 
-        print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_sample_actual}.")
-        print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
+            print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_sample_actual}.")
+            print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
 
-        if isinstance(fval, float):
-            fval = int(round(fval * 1000)) / 1000.0
-        if fval not in sys_val_list:
-            sys_val_list.append(fval)
-            sys_val_list.sort(key=mixed_sort_key)
-            print(f"Updated sys_vals: {sys_val_list}")
+            if isinstance(fval, float):
+                fval = int(round(fval * 1000)) / 1000.0
+            if fval not in sys_val_list:
+                sys_val_list.append(fval)
+                sys_val_list.sort(key=mixed_sort_key)
+                print(f"Updated sys_vals: {sys_val_list}")
 
         # ---- Periodic probability (bound) test via sampling ----
         probs_updated = False
@@ -2007,10 +2164,24 @@ def run_rule_extraction_by_mcs(
             loops = max(n_sample // sample_batch_size, 1)
             c2 = {"survival": 0, "failure": 0, "unknown": 0}
             for _ in range(loops):
-                s = sample_categorical(probs, sample_batch_size)
-                ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
-                for k in c2:
-                    c2[k] += ci[k]
+                if _use_multi_gpu:
+                    n_gpus = len(_gpu_devices)
+                    per_gpu = sample_batch_size // n_gpus
+                    remainder = sample_batch_size % n_gpus
+                    tasks = []
+                    for gi in range(n_gpus):
+                        n_gi = per_gpu + (1 if gi < remainder else 0)
+                        rules_s_gi = rules_mat_surv.to(_gpu_devices[gi])
+                        rules_f_gi = rules_mat_fail.to(_gpu_devices[gi])
+                        tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, False))
+                    for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
+                        for k in c2:
+                            c2[k] += ci[k]
+                else:
+                    s = sample_categorical(probs, sample_batch_size)
+                    ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
+                    for k in c2:
+                        c2[k] += ci[k]
             sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
             print("---")
             print(f"Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
@@ -2067,10 +2238,24 @@ def run_rule_extraction_by_mcs(
     loops = max(n_sample // sample_batch_size, 1)
     c2 = {"survival": 0, "failure": 0, "unknown": 0}
     for _ in range(loops):
-        s = sample_categorical(probs, sample_batch_size)
-        ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
-        for k in c2:
-            c2[k] += ci[k]
+        if _use_multi_gpu:
+            n_gpus = len(_gpu_devices)
+            per_gpu = sample_batch_size // n_gpus
+            remainder = sample_batch_size % n_gpus
+            tasks = []
+            for gi in range(n_gpus):
+                n_gi = per_gpu + (1 if gi < remainder else 0)
+                rules_s_gi = rules_mat_surv.to(_gpu_devices[gi])
+                rules_f_gi = rules_mat_fail.to(_gpu_devices[gi])
+                tasks.append((_gpu_probs[gi], n_gi, rules_s_gi, rules_f_gi, False))
+            for _, ci in _gpu_thread_pool.map(_sample_and_classify_on_device, tasks):
+                for k in c2:
+                    c2[k] += ci[k]
+        else:
+            s = sample_categorical(probs, sample_batch_size)
+            ci = classify_samples(s, rules_mat_surv, rules_mat_fail)
+            for k in c2:
+                c2[k] += ci[k]
     sp2 = {k: v / (sample_batch_size * loops) for k, v in c2.items()}
     print("---")
     print(f"[Final results] Probs: 'surv': {sp2['survival']: .3e}, 'fail': {sp2['failure']: .3e}, 'unkn': {sp2['unknown']: .3e}")
@@ -2090,6 +2275,13 @@ def run_rule_extraction_by_mcs(
         "avg_len_fail": _avg_rule_len(rules_fail),
         "rss_gb": rss_gb,   
     })
+
+    # ---- clean up worker pools ----
+    if _pool is not None:
+        _pool.close()
+        _pool.join()
+    if _gpu_thread_pool is not None:
+        _gpu_thread_pool.shutdown(wait=False)
 
     return {
         "sys_vals": sorted(sys_val_list, key=mixed_sort_key),
