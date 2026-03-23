@@ -1092,57 +1092,82 @@ def sample_new_comp_st_to_test(probs, rules_mat, B=1_024, max_iters=1_000):
             return None, all_samples
 
 
+def _check_any_subset(samples_flat, not_rules_flat, sample_chunk=10000):
+    """
+    Check which samples are subsets of at least one rule using matmul.
+
+    sample ⊆ rule iff (sample & ~rule) has no 1s, i.e. sample_flat @ not_rule_flat.T == 0.
+
+    Args:
+        samples_flat: (B, D) float tensor (flattened binary samples)
+        not_rules_flat: (N_rules, D) float tensor (flattened ~rules)
+        sample_chunk: process this many samples at a time to bound memory
+
+    Returns:
+        (B,) bool tensor — True if sample is subset of any rule
+    """
+    B = samples_flat.shape[0]
+    device = samples_flat.device
+    result = torch.zeros(B, dtype=torch.bool, device=device)
+
+    for start in range(0, B, sample_chunk):
+        end = min(start + sample_chunk, B)
+        # (chunk, D) @ (D, N_rules) → (chunk, N_rules): count of violations
+        violations = samples_flat[start:end] @ not_rules_flat.T
+        result[start:end] = (violations == 0).any(dim=1)
+
+    return result
+
+
+def _ensure_rules_tensor(rules, device):
+    """Convert rules to a 3D tensor if given as a list."""
+    if isinstance(rules, torch.Tensor):
+        return rules.to(device)
+    if len(rules) == 0:
+        return torch.zeros((0,), device=device)
+    return torch.stack([r.to(device) for r in rules])
+
+
 def classify_samples(samples, survival_rules, failure_rules):
     """
     Classify samples as survival, failure, or unknown using subset checks.
 
+    Uses batched matmul instead of per-rule loop for O(1) GPU ops regardless
+    of rule count.
+
     Args:
         samples: (n_sample, n_var, n_state) sample tensor (binary)
-        survival_rules: list of rule tensors, each shape (n_var, n_state)
-        failure_rules: list of rule tensors, each shape (n_var, n_state)
+        survival_rules: (n_surv, n_var, n_state) rule tensor or list
+        failure_rules: (n_fail, n_var, n_state) rule tensor or list
 
     Returns:
         counts: dict with keys 'survival', 'failure', 'unknown'
     """
-
     device = samples.device
     n_sample = samples.shape[0]
+    survival_rules = _ensure_rules_tensor(survival_rules, device)
+    failure_rules = _ensure_rules_tensor(failure_rules, device)
 
-    # Tracking masks
-    classified = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    samples_flat = samples.reshape(n_sample, -1).to(dtype=torch.float16)
+
+    # Survival check
     survival_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    if survival_rules.ndim == 3 and survival_rules.shape[0] > 0:
+        not_surv = (~survival_rules.bool()).reshape(survival_rules.shape[0], -1).to(dtype=torch.float16)
+        survival_mask = _check_any_subset(samples_flat, not_surv)
+
+    # Failure check (only on non-survival samples)
     failure_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
-
-    # Convert list to tensor stack
-    all_rules = [(r, 'survival') for r in survival_rules] + [(r, 'failure') for r in failure_rules] # exclude the last row which represents the system state
-
-    for rule_tensor, label in all_rules:
-        # Only apply to unclassified samples
-        unclassified_idx = ~classified
-        if not unclassified_idx.any():
-            break
-
-        current_samples = samples[unclassified_idx]  # shape (n_curr, n_var, n_state)
-
-        rule = rule_tensor.to(device).bool()
-        current_samples = current_samples.bool()
-
-        # Subset check
-        is_subset = torch.all((current_samples & rule) == current_samples, dim=(1, 2))
-        idx_all = torch.where(unclassified_idx)[0]
-        matched_idx = idx_all[is_subset]
-
-        if label == 'survival':
-            survival_mask[matched_idx] = True
-        else:
-            failure_mask[matched_idx] = True
-
-        classified[matched_idx] = True
+    remaining = ~survival_mask
+    if failure_rules.ndim == 3 and failure_rules.shape[0] > 0 and remaining.any():
+        not_fail = (~failure_rules.bool()).reshape(failure_rules.shape[0], -1).to(dtype=torch.float16)
+        fail_sub = _check_any_subset(samples_flat[remaining], not_fail)
+        failure_mask[remaining] = fail_sub
 
     counts = {
-        'survival': survival_mask.sum().item(),
-        'failure': failure_mask.sum().item(),
-        'unknown': (~classified).sum().item()
+        'survival': int(survival_mask.sum().item()),
+        'failure': int(failure_mask.sum().item()),
+        'unknown': int((~survival_mask & ~failure_mask).sum().item())
     }
     return counts
 
@@ -1663,47 +1688,28 @@ def classify_samples_with_indices(
     """
     device = samples.device
     n_sample = samples.shape[0]
+    survival_rules = _ensure_rules_tensor(survival_rules, device)
+    failure_rules = _ensure_rules_tensor(failure_rules, device)
 
-    # Tracking masks
-    classified = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    samples_flat = samples.reshape(n_sample, -1).to(dtype=torch.float16)
+
+    # Survival check
     survival_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    if survival_rules.ndim == 3 and survival_rules.shape[0] > 0:
+        not_surv = (~survival_rules.bool()).reshape(
+            survival_rules.shape[0], -1).to(dtype=torch.float16)
+        survival_mask = _check_any_subset(samples_flat, not_surv)
+
+    # Failure check (only on non-survival samples)
     failure_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    remaining = ~survival_mask
+    if failure_rules.ndim == 3 and failure_rules.shape[0] > 0 and remaining.any():
+        not_fail = (~failure_rules.bool()).reshape(
+            failure_rules.shape[0], -1).to(dtype=torch.float16)
+        fail_sub = _check_any_subset(samples_flat[remaining], not_fail)
+        failure_mask[remaining] = fail_sub
 
-    # Build (rule_tensor, label) list; drop system row if requested
-    def _prep_rules(rules, label):
-        out = []
-        for r in rules:
-            out.append((r.to(device=device, dtype=torch.bool), label))
-        return out
-
-    all_rules = _prep_rules(survival_rules, 'survival') + _prep_rules(failure_rules, 'failure')
-
-    # Classification loop
-    samples_b = samples.to(device=device, dtype=torch.bool)
-    for rule_tensor, label in all_rules:
-        unclassified_idx = ~classified
-        if not unclassified_idx.any():
-            break
-
-        current_samples = samples_b[unclassified_idx]  # (n_curr, n_var, n_state)
-        # Subset check: sample ⊆ rule  <=>  (sample & rule) == sample  across (var, state)
-        is_subset = torch.all((current_samples & rule_tensor) == current_samples, dim=(1, 2))
-
-        # Map back to original indices
-        idx_all = torch.where(unclassified_idx)[0]
-        matched_idx = idx_all[is_subset]
-
-        if matched_idx.numel() == 0:
-            continue
-
-        if label == 'survival':
-            survival_mask[matched_idx] = True
-        else:
-            failure_mask[matched_idx] = True
-
-        classified[matched_idx] = True
-
-    unknown_mask = ~classified
+    unknown_mask = ~survival_mask & ~failure_mask
 
     # Indices
     idx_survival = torch.where(survival_mask)[0]
