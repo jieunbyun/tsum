@@ -1092,57 +1092,82 @@ def sample_new_comp_st_to_test(probs, rules_mat, B=1_024, max_iters=1_000):
             return None, all_samples
 
 
+def _check_any_subset(samples_flat, not_rules_flat, sample_chunk=10000):
+    """
+    Check which samples are subsets of at least one rule using matmul.
+
+    sample ⊆ rule iff (sample & ~rule) has no 1s, i.e. sample_flat @ not_rule_flat.T == 0.
+
+    Args:
+        samples_flat: (B, D) float tensor (flattened binary samples)
+        not_rules_flat: (N_rules, D) float tensor (flattened ~rules)
+        sample_chunk: process this many samples at a time to bound memory
+
+    Returns:
+        (B,) bool tensor — True if sample is subset of any rule
+    """
+    B = samples_flat.shape[0]
+    device = samples_flat.device
+    result = torch.zeros(B, dtype=torch.bool, device=device)
+
+    for start in range(0, B, sample_chunk):
+        end = min(start + sample_chunk, B)
+        # (chunk, D) @ (D, N_rules) → (chunk, N_rules): count of violations
+        violations = samples_flat[start:end] @ not_rules_flat.T
+        result[start:end] = (violations == 0).any(dim=1)
+
+    return result
+
+
+def _ensure_rules_tensor(rules, device):
+    """Convert rules to a 3D tensor if given as a list."""
+    if isinstance(rules, torch.Tensor):
+        return rules.to(device)
+    if len(rules) == 0:
+        return torch.zeros((0,), device=device)
+    return torch.stack([r.to(device) for r in rules])
+
+
 def classify_samples(samples, survival_rules, failure_rules):
     """
     Classify samples as survival, failure, or unknown using subset checks.
 
+    Uses batched matmul instead of per-rule loop for O(1) GPU ops regardless
+    of rule count.
+
     Args:
         samples: (n_sample, n_var, n_state) sample tensor (binary)
-        survival_rules: list of rule tensors, each shape (n_var, n_state)
-        failure_rules: list of rule tensors, each shape (n_var, n_state)
+        survival_rules: (n_surv, n_var, n_state) rule tensor or list
+        failure_rules: (n_fail, n_var, n_state) rule tensor or list
 
     Returns:
         counts: dict with keys 'survival', 'failure', 'unknown'
     """
-
     device = samples.device
     n_sample = samples.shape[0]
+    survival_rules = _ensure_rules_tensor(survival_rules, device)
+    failure_rules = _ensure_rules_tensor(failure_rules, device)
 
-    # Tracking masks
-    classified = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    samples_flat = samples.reshape(n_sample, -1).to(dtype=torch.float16)
+
+    # Survival check
     survival_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    if survival_rules.ndim == 3 and survival_rules.shape[0] > 0:
+        not_surv = (~survival_rules.bool()).reshape(survival_rules.shape[0], -1).to(dtype=torch.float16)
+        survival_mask = _check_any_subset(samples_flat, not_surv)
+
+    # Failure check (only on non-survival samples)
     failure_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
-
-    # Convert list to tensor stack
-    all_rules = [(r, 'survival') for r in survival_rules] + [(r, 'failure') for r in failure_rules] # exclude the last row which represents the system state
-
-    for rule_tensor, label in all_rules:
-        # Only apply to unclassified samples
-        unclassified_idx = ~classified
-        if not unclassified_idx.any():
-            break
-
-        current_samples = samples[unclassified_idx]  # shape (n_curr, n_var, n_state)
-
-        rule = rule_tensor.to(device).bool()
-        current_samples = current_samples.bool()
-
-        # Subset check
-        is_subset = torch.all((current_samples & rule) == current_samples, dim=(1, 2))
-        idx_all = torch.where(unclassified_idx)[0]
-        matched_idx = idx_all[is_subset]
-
-        if label == 'survival':
-            survival_mask[matched_idx] = True
-        else:
-            failure_mask[matched_idx] = True
-
-        classified[matched_idx] = True
+    remaining = ~survival_mask
+    if failure_rules.ndim == 3 and failure_rules.shape[0] > 0 and remaining.any():
+        not_fail = (~failure_rules.bool()).reshape(failure_rules.shape[0], -1).to(dtype=torch.float16)
+        fail_sub = _check_any_subset(samples_flat[remaining], not_fail)
+        failure_mask[remaining] = fail_sub
 
     counts = {
-        'survival': survival_mask.sum().item(),
-        'failure': failure_mask.sum().item(),
-        'unknown': (~classified).sum().item()
+        'survival': int(survival_mask.sum().item()),
+        'failure': int(failure_mask.sum().item()),
+        'unknown': int((~survival_mask & ~failure_mask).sum().item())
     }
     return counts
 
@@ -1261,6 +1286,108 @@ def update_rules(min_comps_st, rules_dict, rules_mat, row_names, verbose=False):
         print("No. of existing rules removed: ", int(sum(are_Rset_subset)))
 
     return rules_dict, rules_mat
+
+
+def update_rules_batch(new_rules_dicts, rules_dict, rules_mat, row_names, verbose=False):
+    """
+    Batch version of update_rules: process multiple new rules at once.
+
+    Instead of calling is_subset N times (each against a growing rules_mat),
+    this does:
+      1. Convert all new rules to matrices in one pass
+      2. One batched dominance check: new vs existing
+      3. One batched dominance check: new vs new (inter-batch)
+      4. Filter and append all surviving rules at once
+
+    Returns:
+        (rules_dict, rules_mat, n_added, n_removed)
+    """
+    if not new_rules_dicts:
+        return rules_dict, rules_mat, 0, 0
+
+    n_existing, n_var, n_state = rules_mat.shape
+    device = rules_mat.device
+
+    # Step 1: convert all new rules to matrices
+    new_mats = []
+    for rd in new_rules_dicts:
+        new_mats.append(from_rule_dict_to_mat(rd, row_names, n_state))
+    new_batch = torch.stack(new_mats, dim=0)  # (N_new, n_var, n_state)
+    n_new = new_batch.shape[0]
+
+    # Step 2: check new vs existing
+    # For each new rule, is it dominated by any existing rule?
+    # For each existing rule, is it dominated by any new rule?
+    # new_batch: (N_new, n_var, n_state), rules_mat: (N_ex, n_var, n_state)
+    new_dominated = torch.zeros(n_new, dtype=torch.bool, device=device)
+    existing_dominated = torch.zeros(n_existing, dtype=torch.bool, device=device)
+
+    if n_existing > 0 and n_new > 0:
+        # Chunk over existing rules to bound memory: (N_new, chunk, n_var, n_state)
+        # With N_new=96, chunk=8000, n_var=120, n_state=2: ~180MB per chunk
+        chunk_size = max(1, 500_000_000 // (n_new * n_var * n_state * 4))  # ~500MB limit
+        for c_start in range(0, n_existing, chunk_size):
+            c_end = min(c_start + chunk_size, n_existing)
+            ex_chunk = rules_mat[c_start:c_end]  # (chunk, n_var, n_state)
+            new_exp = new_batch.unsqueeze(1)      # (N_new, 1, n_var, n_state)
+            ex_exp = ex_chunk.unsqueeze(0)        # (1, chunk, n_var, n_state)
+            intersect = new_exp & ex_exp          # (N_new, chunk, n_var, n_state)
+
+            # new[i] dominated by existing[j]?
+            new_eq = (new_exp == intersect).all(dim=(2, 3))  # (N_new, chunk)
+            new_dominated |= new_eq.any(dim=1)
+
+            # existing[j] dominated by new[i]?
+            ex_eq = (ex_exp == intersect).all(dim=(2, 3))    # (N_new, chunk)
+            existing_dominated[c_start:c_end] |= ex_eq.any(dim=0)
+
+    # Step 3: among surviving new rules, check inter-dominance
+    surviving_new_idx = torch.where(~new_dominated)[0]
+    if len(surviving_new_idx) > 1:
+        surv_batch = new_batch[surviving_new_idx]  # (M, n_var, n_state)
+        M = surv_batch.shape[0]
+        s_exp_i = surv_batch.unsqueeze(1)  # (M, 1, n_var, n_state)
+        s_exp_j = surv_batch.unsqueeze(0)  # (1, M, n_var, n_state)
+        s_inter = s_exp_i & s_exp_j        # (M, M, n_var, n_state)
+        # i is subset of j: s_exp_i == s_inter
+        i_sub_j = (s_exp_i == s_inter).all(dim=(2, 3))  # (M, M)
+        j_sub_i = (s_exp_j == s_inter).all(dim=(2, 3))  # (M, M)
+        # Mask diagonal
+        i_sub_j.fill_diagonal_(False)
+        j_sub_i.fill_diagonal_(False)
+        # Strict dominance: j dominates i (i⊂j but j⊄i)
+        strict = i_sub_j & ~j_sub_i
+        # Equal rules (i⊂j AND j⊂i): tiebreak by index — only j<i can dominate i
+        equal = i_sub_j & j_sub_i
+        lower_mask = torch.tril(torch.ones(M, M, dtype=torch.bool, device=device), diagonal=-1)
+        # Rule i is dominated if strictly dominated by any j, or equal to some j<i
+        inter_dominated = strict.any(dim=1) | (equal & lower_mask).any(dim=1)  # (M,)
+        # Map back: mark dominated ones
+        dominated_in_surviving = surviving_new_idx[inter_dominated]
+        new_dominated[dominated_in_surviving] = True
+
+    # Step 4: filter existing, append surviving new
+    keep_existing = ~existing_dominated
+    keep_new = ~new_dominated
+
+    n_removed = int(existing_dominated.sum().item())
+    n_added = int(keep_new.sum().item())
+
+    rules_mat = torch.cat([
+        rules_mat[keep_existing],
+        new_batch[keep_new],
+    ], dim=0)
+
+    rules_dict = [r for r, k in zip(rules_dict, keep_existing.tolist()) if k]
+    for i, rd in enumerate(new_rules_dicts):
+        if keep_new[i]:
+            rules_dict.append(rd)
+
+    if verbose:
+        print(f"Batch update: {n_added} rules added, {n_removed} existing rules removed "
+              f"({n_new - n_added} new rules dominated)")
+
+    return rules_dict, rules_mat, n_added, n_removed
 
 def run_rule_extraction(
     *,
@@ -1561,47 +1688,28 @@ def classify_samples_with_indices(
     """
     device = samples.device
     n_sample = samples.shape[0]
+    survival_rules = _ensure_rules_tensor(survival_rules, device)
+    failure_rules = _ensure_rules_tensor(failure_rules, device)
 
-    # Tracking masks
-    classified = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    samples_flat = samples.reshape(n_sample, -1).to(dtype=torch.float16)
+
+    # Survival check
     survival_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    if survival_rules.ndim == 3 and survival_rules.shape[0] > 0:
+        not_surv = (~survival_rules.bool()).reshape(
+            survival_rules.shape[0], -1).to(dtype=torch.float16)
+        survival_mask = _check_any_subset(samples_flat, not_surv)
+
+    # Failure check (only on non-survival samples)
     failure_mask = torch.zeros(n_sample, dtype=torch.bool, device=device)
+    remaining = ~survival_mask
+    if failure_rules.ndim == 3 and failure_rules.shape[0] > 0 and remaining.any():
+        not_fail = (~failure_rules.bool()).reshape(
+            failure_rules.shape[0], -1).to(dtype=torch.float16)
+        fail_sub = _check_any_subset(samples_flat[remaining], not_fail)
+        failure_mask[remaining] = fail_sub
 
-    # Build (rule_tensor, label) list; drop system row if requested
-    def _prep_rules(rules, label):
-        out = []
-        for r in rules:
-            out.append((r.to(device=device, dtype=torch.bool), label))
-        return out
-
-    all_rules = _prep_rules(survival_rules, 'survival') + _prep_rules(failure_rules, 'failure')
-
-    # Classification loop
-    samples_b = samples.to(device=device, dtype=torch.bool)
-    for rule_tensor, label in all_rules:
-        unclassified_idx = ~classified
-        if not unclassified_idx.any():
-            break
-
-        current_samples = samples_b[unclassified_idx]  # (n_curr, n_var, n_state)
-        # Subset check: sample ⊆ rule  <=>  (sample & rule) == sample  across (var, state)
-        is_subset = torch.all((current_samples & rule_tensor) == current_samples, dim=(1, 2))
-
-        # Map back to original indices
-        idx_all = torch.where(unclassified_idx)[0]
-        matched_idx = idx_all[is_subset]
-
-        if matched_idx.numel() == 0:
-            continue
-
-        if label == 'survival':
-            survival_mask[matched_idx] = True
-        else:
-            failure_mask[matched_idx] = True
-
-        classified[matched_idx] = True
-
-    unknown_mask = ~classified
+    unknown_mask = ~survival_mask & ~failure_mask
 
     # Indices
     idx_survival = torch.where(survival_mask)[0]
@@ -1967,7 +2075,12 @@ def run_rule_extraction_by_mcs(
         res = None
         samples = None
         i = -1
+        _t_search = 0.0
+        _t_minimize = 0.0
+        _t_rules = 0.0
+        _t_probs = 0.0
 
+        _ts = time.perf_counter()
         for i in range(search_loops):
             if _use_multi_gpu:
                 # Split batch across GPUs, sample + classify in parallel threads
@@ -2005,6 +2118,8 @@ def run_rule_extraction_by_mcs(
             if res['idx_unknown'].numel() > 0:
                 is_new_cand = True
                 break
+
+        _t_search = time.perf_counter() - _ts
 
         # denominator = number of samples actually processed
         n_sample_actual = sample_batch_size * (i + 1)
@@ -2055,6 +2170,10 @@ def run_rule_extraction_by_mcs(
             metrics_log.append({
                 "round": n_round,
                 "time_sec": dt,
+                "t_search": round(_t_search, 3),
+                "t_minimize": 0.0,
+                "t_rules": 0.0,
+                "t_probs": round(dt - _t_search, 3),
                 "n_rules_surv": int(len(rules_mat_surv)),
                 "n_rules_fail": int(len(rules_mat_fail)),
                 "probs_updated": probs_updated,
@@ -2081,6 +2200,7 @@ def run_rule_extraction_by_mcs(
         # --- We have unknowns: extract unknown(s) and build rule(s) ---
         idx_unknown = res['idx_unknown']
 
+        _ts = time.perf_counter()
         if _pool is not None and min_rule_search:
             # ---- Parallel: pick up to n_workers unknowns and minimize concurrently ----
             n_pick = min(n_workers, len(idx_unknown))
@@ -2095,24 +2215,37 @@ def run_rule_extraction_by_mcs(
                 tasks.append((cst, None))
 
             results = _pool.map(_minimize_one_unknown, tasks)
+            _t_minimize = time.perf_counter() - _ts
 
+            _ts = time.perf_counter()
+            # Separate results into survival and failure batches
+            new_surv_dicts = []
+            new_fail_dicts = []
             for min_comps_st, sys_st, fval in results:
                 if sys_st >= sys_surv_st:
-                    print("Survival sample found from sampling.")
-                    rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
+                    new_surv_dicts.append(min_comps_st)
                 else:
-                    print("Failure sample found from sampling.")
-                    rules_fail, rules_mat_fail = update_rules(min_comps_st, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
-
-                print(f"New rule added. System state: {sys_st}, System value: {fval}. Total samples: {n_sample_actual}.")
-                print(f"New rule (No. of conditions: {len(min_comps_st)-1}): {min_comps_st}")
+                    new_fail_dicts.append(min_comps_st)
 
                 if isinstance(fval, float):
                     fval = int(round(fval * 1000)) / 1000.0
                 if fval not in sys_val_list:
                     sys_val_list.append(fval)
                     sys_val_list.sort(key=mixed_sort_key)
-                    print(f"Updated sys_vals: {sys_val_list}")
+
+            # Batch update: one dominance check per type instead of N sequential ones
+            if new_surv_dicts:
+                rules_surv, rules_mat_surv, n_add, n_rem = update_rules_batch(
+                    new_surv_dicts, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
+                print(f"Survival: {n_add} rules added, {n_rem} removed (from {len(new_surv_dicts)} candidates)")
+            if new_fail_dicts:
+                rules_fail, rules_mat_fail, n_add, n_rem = update_rules_batch(
+                    new_fail_dicts, rules_fail, rules_mat_fail, row_names, verbose=rule_update_verbose)
+                print(f"Failure: {n_add} rules added, {n_rem} removed (from {len(new_fail_dicts)} candidates)")
+
+            if sys_val_list:
+                sys_val_list.sort(key=mixed_sort_key)
+                print(f"Updated sys_vals: {sys_val_list}")
 
         else:
             # ---- Serial (original): pick one unknown ----
@@ -2140,7 +2273,9 @@ def run_rule_extraction_by_mcs(
                     fval = info.get('final_sys_state', fval)
                 else:
                     min_comps_st = get_min_fail_comps_st(min_comps_st0, max_st=n_state-1, sys_fail_st=sys_surv_st-1)
+            _t_minimize = time.perf_counter() - _ts
 
+            _ts = time.perf_counter()
             if sys_st >= sys_surv_st:
                 print("Survival sample found from sampling.")
                 rules_surv, rules_mat_surv = update_rules(min_comps_st, rules_surv, rules_mat_surv, row_names, verbose=rule_update_verbose)
@@ -2159,7 +2294,10 @@ def run_rule_extraction_by_mcs(
                 print(f"Updated sys_vals: {sys_val_list}")
 
         # ---- Periodic probability (bound) test via sampling ----
+        if _t_rules == 0.0:
+            _t_rules = time.perf_counter() - _ts
         probs_updated = False
+        _ts = time.perf_counter()
         if (n_round % prob_update_every) == 0:
             loops = max(n_sample // sample_batch_size, 1)
             c2 = {"survival": 0, "failure": 0, "unknown": 0}
@@ -2191,11 +2329,16 @@ def run_rule_extraction_by_mcs(
             probs_updated = True
 
         # ---- metrics for this round ----
+        _t_probs = time.perf_counter() - _ts
         rss_gb = psutil.Process().memory_info().rss / (1024**3)
         dt = time.perf_counter() - t0
         metrics_log.append({
             "round": n_round,
             "time_sec": dt,
+            "t_search": round(_t_search, 3),
+            "t_minimize": round(_t_minimize, 3),
+            "t_rules": round(_t_rules, 3),
+            "t_probs": round(_t_probs, 3),
             "n_rules_surv": int(len(rules_mat_surv)),
             "n_rules_fail": int(len(rules_mat_fail)),
             "probs_updated": probs_updated,
@@ -2205,7 +2348,7 @@ def run_rule_extraction_by_mcs(
             "n_sample_actual": n_sample_actual,
             "avg_len_surv": _avg_rule_len(rules_surv),
             "avg_len_fail": _avg_rule_len(rules_fail),
-            "rss_gb": rss_gb,   
+            "rss_gb": rss_gb,
         })
 
         if (n_round % save_every) == 0:

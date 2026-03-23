@@ -29,18 +29,25 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from tsum import tsum
 
+try:
+    from tsum.igraph_sfun import make_igraph_sfun_global_conn, make_igraph_sfun_conn
+    HAS_IGRAPH = True
+except ImportError:
+    HAS_IGRAPH = False
+
 repo_root = Path(__file__).resolve().parents[1]
 out_base = repo_root / "results"
 
 
 def generate_random_network_data(name: str = "rg",
                                  generator = "rg",
-                                 generator_params={"n_nodes": 60, "radius": 0.25, "p_fail": 0.1}, 
+                                 generator_params={"n_nodes": 60, "radius": 0.25, "p_fail": 0.1},
                                  target_g_conn = 1,
                                  min_g_conn = 0, # Minimum global connectivity (k) required for the generated graph. Only used if find_connected_graph=True.
                                  out_base: Path = None,
                                  seed: int = 7,
-                                 find_connected_graph: bool = True) -> Path:
+                                 find_connected_graph: bool = True,
+                                 use_igraph: bool = False) -> Path:
     print(f"Generating random network data {name} with params: {generator_params} ..")
 
     if find_connected_graph: # Try multiple times with different seeds until we find a connected graph (or give up after max_tries)
@@ -119,18 +126,23 @@ def generate_random_network_data(name: str = "rg",
         json.dump(nodes, f, indent=4)
 
     # Build system function
-    ## Connectivity of one origin-destination pair
-    sys_func_conn = lambda comps_st: eval_1od_connectivity(comps_st, G, hub[0], dest[0])
+    if use_igraph:
+        print("Using igraph-accelerated system functions")
+        sys_func_conn = make_igraph_sfun_conn(G, hub[0], dest[0])
+        sys_func_global_conn = make_igraph_sfun_global_conn(G, target_g_conn)
+    else:
+        ## Connectivity of one origin-destination pair
+        sys_func_conn = lambda comps_st: eval_1od_connectivity(comps_st, G, hub[0], dest[0])
 
-    ## Global connectivity
-    def sys_func_global_conn_long(comps_st):
-        _, k, _ = eval_global_conn_k(comps_st, G)
-        if k >= target_g_conn:
-            sys_st = 1
-        else:
-            sys_st = 0
-        return k, sys_st, None
-    sys_func_global_conn = lambda comps_st: sys_func_global_conn_long(comps_st)
+        ## Global connectivity
+        def sys_func_global_conn_long(comps_st):
+            _, k, _ = eval_global_conn_k(comps_st, G)
+            if k >= target_g_conn:
+                sys_st = 1
+            else:
+                sys_st = 0
+            return k, sys_st, None
+        sys_func_global_conn = lambda comps_st: sys_func_global_conn_long(comps_st)
 
     ## System functions for BRC (it accepts only 's'/'f' states for system event)
     def brc_wrapper(sys_func, func_option: str = "conn"):
@@ -172,7 +184,7 @@ def generate_random_network_data(name: str = "rg",
         "sys_func_conn_brc": brc_wrapper(sys_func_conn),
         "sys_func_global_conn_brc": brc_wrapper(sys_func_global_conn),
         "sys_func_conn_tsum": tsum_wrapper(sys_func_conn),
-        "sys_func_global_conn_tsum": tsum_wrapper(sys_func_global_conn),
+        "sys_func_global_conn_tsum": tsum_wrapper(sys_func_global_conn) if not use_igraph else sys_func_global_conn,
         "graph": G
     }
 
@@ -195,8 +207,11 @@ def _run_example(
     global_conn_dir: str = "tsum_global_conn",
     save_every: int = 0,
     seed: int = 7,
+    use_igraph: bool = False,
 ):
     """Common logic for all examples."""
+    if use_igraph and not HAS_IGRAPH:
+        raise RuntimeError("--use-igraph requires python-igraph: pip install python-igraph")
     generator = "rg"
     ds_root, rg_data = generate_random_network_data(
         name, out_base=out_base,
@@ -206,6 +221,7 @@ def _run_example(
         min_g_conn=min_g_conn,
         seed=seed,
         find_connected_graph=find_connected_graph,
+        use_igraph=use_igraph,
     )
 
     device_list = [d.strip() for d in devices.split(",") if d.strip()] if devices else []
@@ -258,6 +274,7 @@ _common_opts = dict(
     n_sample=typer.Option(10_000_000, help="Total number of samples for probability estimation"),
     sample_batch_size=typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
     max_search_loops=typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
+    use_igraph=typer.Option(False, help="Use igraph (C-based) instead of NetworkX for connectivity. 10-100x faster. Requires: pip install python-igraph"),
 )
 
 
@@ -268,6 +285,7 @@ def example1(
     n_sample: int = _common_opts['n_sample'],
     sample_batch_size: int = _common_opts['sample_batch_size'],
     max_search_loops: int = _common_opts['max_search_loops'],
+    use_igraph: bool = _common_opts['use_igraph'],
     output_str: str = typer.Option("", help="str for output folder"),
 ):
     _run_example(
@@ -278,6 +296,7 @@ def example1(
         global_conn_dir="tsum_global" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
+        use_igraph=use_igraph,
     )
 
 
@@ -288,6 +307,7 @@ def example2(
     n_sample: int = _common_opts['n_sample'],
     sample_batch_size: int = _common_opts['sample_batch_size'],
     max_search_loops: int = _common_opts['max_search_loops'],
+    use_igraph: bool = _common_opts['use_igraph'],
     output_str: str = typer.Option("", help="str for output folder"),
 ):
     _run_example(
@@ -296,6 +316,7 @@ def example2(
         global_conn_dir="tsum_global_conn" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
+        use_igraph=use_igraph,
     )
 
 
@@ -306,6 +327,7 @@ def example3(
     n_sample: int = _common_opts['n_sample'],
     sample_batch_size: int = _common_opts['sample_batch_size'],
     max_search_loops: int = _common_opts['max_search_loops'],
+    use_igraph: bool = _common_opts['use_igraph'],
     output_str: str = typer.Option("", help="str for output folder"),
 ):
     _run_example(
@@ -314,6 +336,7 @@ def example3(
         global_conn_dir="tsum_global_conn" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
+        use_igraph=use_igraph,
     )
 
 
@@ -324,6 +347,7 @@ def example4(
     n_sample: int = _common_opts['n_sample'],
     sample_batch_size: int = _common_opts['sample_batch_size'],
     max_search_loops: int = _common_opts['max_search_loops'],
+    use_igraph: bool = _common_opts['use_igraph'],
     output_str: str = typer.Option("", help="str for output folder"),
 ):
     _run_example(
@@ -334,6 +358,7 @@ def example4(
         global_conn_dir="tsum_global_conn" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
+        use_igraph=use_igraph,
     )
 
 
@@ -347,6 +372,7 @@ def run_parallel(
     n_sample: int = typer.Option(10_000_000, help="Total number of samples for probability estimation"),
     sample_batch_size: int = typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
     max_search_loops: int = typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
+    use_igraph: bool = typer.Option(False, help="Use igraph (C-based) instead of NetworkX for connectivity. 10-100x faster."),
 ):
     """Run multiple examples in parallel, each pinned to one or more GPUs."""
 
@@ -382,6 +408,8 @@ def run_parallel(
                "--n-sample", str(n_sample),
                "--sample-batch-size", str(sample_batch_size),
                "--max-search-loops", str(max_search_loops)]
+        if use_igraph:
+            cmd.append("--use-igraph")
         if device_str and gpus_per_example > 1:
             cmd += ["--devices", device_str]
         proc = subprocess.Popen(
