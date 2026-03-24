@@ -291,8 +291,8 @@ def example1(
     _run_example(
         name="rg1",
         gen_params={"n_nodes": 60, "radius": 0.25, "p_fail": 0.05},
-        find_connected_graph=False,
-        run_conn=False,
+        #find_connected_graph=False,
+        #run_conn=False,
         global_conn_dir="tsum_global" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
@@ -313,7 +313,7 @@ def example2(
     _run_example(
         name="rg2",
         gen_params={"n_nodes": 120, "radius": 0.12, "p_fail": 0.05},
-        global_conn_dir="tsum_global_conn" + output_str,
+        global_conn_dir="tsum_global" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
         use_igraph=use_igraph,
