@@ -12,6 +12,7 @@ Available tasks
     brc                 BRC monitor data (refs vs. unk-prob / mem / time)
     brc_vs_tsum         BRC vs. TSUM comparison
     tsum_conn           TSUM 1-OD-conn vs. global-conn
+    global_conn_gpu     global-conn (CPU) vs. global_conn_gpu comparison
     no_min_rule         TSUM 1-OD-conn vs. no-min-rule (Graph 1)
     results_summary     full results summary table (includes sys-prob eval)
     direct_summary      direct results summary table (no sys-prob eval)
@@ -874,6 +875,191 @@ def draw_tsum_data(
         xlim=[1, 1e4+100]
     )
 
+def draw_global_conn_gpu_comparison(
+    cpu_paths: list,
+    gpu_paths: list,
+    save_suffix: str = "_global_conn_gpu",
+) -> None:
+    """
+    Draws three figures comparing global-conn (CPU) vs. global_conn_gpu:
+    - reference states vs. unknown probability
+    - reference states vs. memory usage
+    - reference states vs. cumulative time
+
+    cpu_paths : list of Path
+        metrics.jsonl files for tsum_global_conn (one per graph).
+        x-axis = round number.
+    gpu_paths : list of Path
+        metrics.json files for tsum_global_conn_gpu (one per graph).
+        x-axis = n_rules_surv + n_rules_fail (total reference states found
+        across all GPU workers up to that round).
+    """
+
+    if len(cpu_paths) != len(gpu_paths):
+        raise ValueError("cpu_paths and gpu_paths must have the same length.")
+
+    n_graphs = len(cpu_paths)
+    graph_ids = [f"Graph {i+1}" for i in range(n_graphs)]
+
+    cpu_labels = [f"{g}; Global" for g in graph_ids]
+    gpu_labels = [f"{g}; Global; GPU" for g in graph_ids]
+
+    # Same colour as tsum_conn for global-conn; distinct colour for GPU
+    cpu_color = "#E69F00"
+    gpu_color = "#009E73"   # green — colorblind-safe (Wong palette)
+    _ls_cycle = ['-', '--']
+
+    sec_to_hr = 1.0 / 3600.0
+    def _read_metrics(path):
+        """Read a metrics file as a DataFrame regardless of .json/.jsonl extension."""
+        with open(path, "r") as f:
+            first_char = f.read(1)
+        lines_format = first_char != "["
+        return pd.read_json(path, lines=lines_format)
+
+    n_rules, total_rules, unk_prob, mem, c_time = {}, {}, {}, {}, {}
+
+    # CPU data: x = round (skip if file not yet available)
+    available_cpu_labels = []
+    for path, label in zip(cpu_paths, cpu_labels):
+        if not Path(path).exists():
+            print(f"[global_conn_gpu] skipping missing CPU file: {path}")
+            continue
+        available_cpu_labels.append(label)
+        data_ = _read_metrics(path)
+        n_rules[label] = data_["round"].to_list()
+        total_rules[label] = (data_["n_rules_surv"] + data_["n_rules_fail"]).to_list()
+        unk_prob[label] = data_["p_unknown"].to_list()
+        mem[label] = data_["rss_gb"].to_list()
+        c_time[label] = (data_["time_sec"].cumsum() * sec_to_hr).to_list()
+
+    all_labels = available_cpu_labels + gpu_labels
+    _colors = (
+        [cpu_color] * len(available_cpu_labels)
+        + [gpu_color] * n_graphs
+    )
+    _linestyles = (
+        [_ls_cycle[cpu_labels.index(l) % 2] for l in available_cpu_labels]
+        + [_ls_cycle[i % 2] for i in range(n_graphs)]
+    )
+
+    # GPU data: x = n_rules_surv + n_rules_fail (total rules found so far)
+    # Prepend [0, epsilon] so lines start from the left edge on log-log plots.
+    _eps = 1e-10
+    for path, label in zip(gpu_paths, gpu_labels):
+        data_ = _read_metrics(path)
+        n_rules[label] = [0] + (data_["n_rules_surv"] + data_["n_rules_fail"]).to_list()
+        total_rules[label] = n_rules[label]
+        unk_prob[label] = [_eps] + data_["p_unknown"].to_list()
+        mem[label] = [_eps] + data_["rss_gb"].to_list()
+        c_time[label] = [_eps] + (data_["time_sec"].cumsum() * sec_to_hr).to_list()
+
+    def _plot_all(ydata_dict, ylabel, save_fname, show_legend=False, xlog=False, ylog=False, xlim=None, ylim=None):
+
+        font_name = "Times New Roman"
+        plt.rcParams["font.family"] = font_name
+        fsz = 11
+        lw = 1.2
+
+        fig = plt.figure(figsize=(2.2, 2.6), constrained_layout=True)
+        ax = fig.add_axes([0.12, 0.08, 0.83, 0.83])
+
+        for i, label in enumerate(all_labels):
+            x = n_rules[label]
+            y = ydata_dict[label]
+            k = min(len(x), len(y))
+            ax.plot(
+                x[:k], y[:k],
+                linestyle=_linestyles[i], linewidth=lw,
+                marker=None, markersize=2.5,
+                label=label,
+                color=_colors[i],
+            )
+
+        ax.set_xlabel("Number of reference states", fontsize=fsz)
+        ax.set_ylabel(ylabel, fontsize=fsz)
+        ax.tick_params(axis="both", which="major", labelsize=fsz - 1)
+        ax.grid(True, which="both", linestyle="--", linewidth=0.6, alpha=0.6)
+        if ylog:
+            ax.set_yscale("log")
+        if xlog:
+            ax.set_xscale("log")
+
+        if show_legend:
+            ax.legend(
+                loc="upper left",
+                bbox_to_anchor=(0.0, 0.94),
+                frameon=True, fontsize=fsz - 1.0,
+                labelspacing=0.25, handletextpad=0.4,
+                handlelength=1.1, borderpad=0.2,
+            )
+
+        if ylabel.lower().startswith("rss"):
+            y_limit = 20
+            ax.axhline(y=y_limit, color="black", linestyle="-", linewidth=1.2)
+            ax.text(
+                ax.get_xlim()[1] * 0.55, y_limit * 1.01,
+                "Threshold", color="black", fontsize=fsz, ha="right", va="bottom",
+            )
+            ax.set_ylim(0, 20 * 1.5)
+
+        if ylabel.lower().startswith("unclassified"):
+            y_thresh = 1e-5
+            ax.axhline(y=y_thresh, color="black", linestyle="-", linewidth=1.2)
+            ax.text(
+                ax.get_xlim()[1] * 0.55, y_thresh / 1.3,
+                "Threshold", color="black", fontsize=fsz, ha="right", va="top",
+            )
+            if ax.get_yscale() == "log":
+                ax.set_ylim(bottom=min(ax.get_ylim()[0], y_thresh / 10))
+            else:
+                ax.set_ylim(bottom=0)
+
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        if xlim is not None:
+            ax.set_xlim(xlim)
+
+        plt.savefig(save_fname, dpi=300, bbox_inches="tight", pad_inches=0.02)
+        plt.close(fig)
+
+    HERE = Path(__file__).resolve().parent
+    _plot_all(
+        ydata_dict=unk_prob,
+        ylabel="Unclassified probability",
+        save_fname=HERE / f"figs/tsum_refs_vs_log_unc_prob{save_suffix}.png",
+        ylog=True, xlog=True, show_legend=False,
+        xlim=[1, 1e6], ylim=[5e-7, 1.6]
+    )
+    _plot_all(
+        ydata_dict=mem,
+        ylabel="RSS (GB)",
+        save_fname=HERE / f"figs/tsum_refs_vs_mem{save_suffix}.png",
+        ylog=True, xlog=True, show_legend=True,
+        xlim=[1, 1e6], ylim=[0.5, 28],
+    )
+    _plot_all(
+        ydata_dict=c_time,
+        ylabel="Cumulative time for\nreference identification (hours)",
+        save_fname=HERE / f"figs/tsum_refs_vs_c_time{save_suffix}.png",
+        ylog=True, xlog=True, show_legend=False,
+        ylim=[5e-4, 1e3], xlim=[1, 1e6],
+    )
+
+    # --- Print summary statistics ---
+    header = f"{'Label':<30} {'Final # rules':>14} {'Total time (hr)':>16} {'Final RSS (GB)':>15} {'Final unk. prob':>16}"
+    print(header)
+    print("-" * len(header))
+    for label in all_labels:
+        print(
+            f"{label:<30} "
+            f"{total_rules[label][-1]:>14d} "
+            f"{c_time[label][-1]:>16.4f} "
+            f"{mem[label][-1]:>15.4f} "
+            f"{unk_prob[label][-1]:>16.2e}"
+        )
+
+
 def get_results_summary(
     data_paths: list,
     labels: list,
@@ -1139,6 +1325,7 @@ if __name__ == "__main__":
         "brc":                 "BRC monitor data (refs vs. unk-prob / mem / time)",
         "brc_vs_tsum":         "BRC vs. TSUM comparison",
         "tsum_conn":           "TSUM 1-OD-conn vs. global-conn",
+        "global_conn_gpu":     "global-conn (CPU) vs. global_conn_gpu comparison",
         "no_min_rule":         "TSUM 1-OD-conn vs. no-min-rule (Graph 1)",
         "results_summary":     "full results summary table (includes sys-prob eval)",
         "direct_summary":      "direct results summary table (no sys-prob eval)",
@@ -1212,6 +1399,19 @@ if __name__ == "__main__":
                 HERE.parent / "results/rg2/v1/tsum_global_conn/metrics.jsonl",
             ],
             labels=["Graph 1; 1 OD", "Graph 2; 1 OD", "Graph 1; Global", "Graph 2; Global"],
+        )
+
+    # --- global-conn (CPU) vs. global_conn_gpu ---
+    if "global_conn_gpu" in run:
+        draw_global_conn_gpu_comparison(
+            cpu_paths=[
+                HERE.parent / "results/rg1/v1/tsum_global_conn/metrics.jsonl",
+                HERE.parent / "results/rg2/v1/tsum_global_conn/metrics.jsonl",
+            ],
+            gpu_paths=[
+                HERE.parent / "results/rg1/v1/tsum_global_conn_gpu/metrics.json",
+                HERE.parent / "results/rg2/v1/tsum_global_conn_gpu/metrics.json",
+            ],
         )
 
     # --- TSUM: 1-OD-conn vs. no-min-rule (Graph 1) ---
