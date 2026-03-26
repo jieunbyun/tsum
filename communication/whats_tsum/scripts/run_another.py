@@ -246,7 +246,6 @@ def _run_example(
         max_search_loops=max_search_loops,
         n_workers=n_workers,
         devices=multi_devices,
-        graph=rg_data['graph'],
     )
 
     if run_conn:
