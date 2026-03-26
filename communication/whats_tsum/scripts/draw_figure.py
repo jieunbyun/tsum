@@ -902,7 +902,7 @@ def draw_global_conn_gpu_comparison(
     graph_ids = [f"Graph {i+1}" for i in range(n_graphs)]
 
     cpu_labels = [f"{g}; Global" for g in graph_ids]
-    gpu_labels = [f"{g}; Global; GPU" for g in graph_ids]
+    gpu_labels = [f"{g}; Global; HPC" for g in graph_ids]
 
     # Same colour as tsum_conn for global-conn; distinct colour for GPU
     cpu_color = "#E69F00"
