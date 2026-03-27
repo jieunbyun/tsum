@@ -10,11 +10,14 @@ Reference: Chan et al. (2024), Table 2: p_f ~ 1.1e-4
 
 Usage:
     python run_case14_bus.py
+    python run_case14_bus.py --unk-prob-thres 1e-4
+    python run_case14_bus.py --devices cuda:0 cuda:1
 """
 
 import sys
 import os
 import time
+import argparse
 from pathlib import Path
 
 os.environ["PYTHONUNBUFFERED"] = "1"
@@ -32,7 +35,18 @@ from sfun_dcopt import make_dcopt_sfun
 from tsum import tsum
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="TSUM on IEEE 14-bus DC-OPF")
+    parser.add_argument("--unk-prob-thres", type=float, default=1e-5,
+                        help="Convergence threshold for unknown probability (default: 1e-5)")
+    parser.add_argument("--devices", nargs="+", default=None,
+                        help="GPU devices for multi-GPU sampling, e.g. cuda:0 cuda:1")
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+
     print("=" * 60)
     print("TSUM on IEEE 14-bus DC-OPF (branches + buses)")
     print("=" * 60)
@@ -80,8 +94,9 @@ def main():
     # 3. Build system function
     # ---------------------------------------------------------------
     print("\nInitialising DC-OPF system function...")
+    case_path = str(HERE / "case14.m")
     sfun = make_dcopt_sfun(
-        case_path='case14',
+        case_path=case_path,
         blackout_threshold=54.8,
         alpha=2.0,
     )
@@ -104,7 +119,9 @@ def main():
     output_dir = HERE / "tsum_results_bus"
     print(f"\n  Output:      {output_dir}")
     print(f"  Samples:     1,000,000 per round (batch 100,000)")
-    print(f"  Convergence: unk_prob < 1e-5")
+    print(f"  Convergence: unk_prob < {args.unk_prob_thres:.0e}")
+    if args.devices:
+        print(f"  Devices:     {args.devices}")
     print(f"\nStarting rule extraction...\n", flush=True)
 
     t0 = time.time()
@@ -114,10 +131,11 @@ def main():
         row_names=row_names,
         n_state=n_state,
         sys_surv_st=1,
-        unk_prob_thres=1e-5,
+        unk_prob_thres=args.unk_prob_thres,
         unk_prob_opt='abs',
         n_sample=1_000_000,
         sample_batch_size=100_000,
+        devices=args.devices,
         output_dir=output_dir,
     )
     elapsed = time.time() - t0
