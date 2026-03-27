@@ -11,7 +11,7 @@ Reference: Chan et al. (2024), Table 2: p_f ~ 1.1e-4
 Usage:
     python run_case14_bus.py
     python run_case14_bus.py --unk-prob-thres 1e-4
-    python run_case14_bus.py --devices cuda:0 cuda:1
+    python run_case14_bus.py --devices cuda:0,cuda:1
 """
 
 import sys
@@ -39,13 +39,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description="TSUM on IEEE 14-bus DC-OPF")
     parser.add_argument("--unk-prob-thres", type=float, default=1e-5,
                         help="Convergence threshold for unknown probability (default: 1e-5)")
-    parser.add_argument("--devices", nargs="+", default=None,
-                        help="GPU devices for multi-GPU sampling, e.g. cuda:0 cuda:1")
+    parser.add_argument("--devices", type=str, default="",
+                        help="Comma-separated GPU devices, e.g. 'cuda:0,cuda:1'")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    device_list = [d.strip() for d in args.devices.split(",") if d.strip()] if args.devices else []
+    multi_devices = device_list if len(device_list) > 1 else None
 
     print("=" * 60)
     print("TSUM on IEEE 14-bus DC-OPF (branches + buses)")
@@ -78,7 +80,7 @@ def main():
     # ---------------------------------------------------------------
     # 2. Build probability tensor (padded to n_state=4)
     # ---------------------------------------------------------------
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(device_list[0] if device_list else ("cuda" if torch.cuda.is_available() else "cpu"))
     probs_list = []
     for name in row_names:
         p = probs_dict[name]
@@ -120,8 +122,8 @@ def main():
     print(f"\n  Output:      {output_dir}")
     print(f"  Samples:     1,000,000 per round (batch 100,000)")
     print(f"  Convergence: unk_prob < {args.unk_prob_thres:.0e}")
-    if args.devices:
-        print(f"  Devices:     {args.devices}")
+    if multi_devices:
+        print(f"  Devices:     {multi_devices}")
     print(f"\nStarting rule extraction...\n", flush=True)
 
     t0 = time.time()
@@ -135,7 +137,7 @@ def main():
         unk_prob_opt='abs',
         n_sample=1_000_000,
         sample_batch_size=100_000,
-        devices=args.devices,
+        devices=multi_devices,
         output_dir=output_dir,
     )
     elapsed = time.time() - t0
