@@ -179,15 +179,15 @@ if __name__ == "__main__":
                                                     find_connected_graph=False)
 
     # Larger example
-    name = "rg2" # Random Geometric Graph
+    """name = "rg2" # Random Geometric Graph
     gen_params2 = {"n_nodes": 120, "radius": 0.12, "p_fail": 0.05}
     target_g_conn2 = 1
     ds_root2, rg_data2 = generate_random_network_data(name, out_base=out_base,
                                                     generator=generator,
                                                     generator_params=gen_params2, 
                                                     target_g_conn=target_g_conn2,
-                                                    seed=7)
-    
+                                                    seed=7)"""
+    """
     # example in between (1)
     name = "rg3" # Random Geometric Graph
     gen_params3 = {"n_nodes": 80, "radius": 0.20, "p_fail": 0.05}
@@ -208,14 +208,17 @@ if __name__ == "__main__":
                                                     target_g_conn=target_g_conn4,
                                                     min_g_conn=2,
                                                     seed=7)
+    """
 
     # Run BRC algorithm on the generated data
     edges1 = rg_data1['edges']
     probs1 = rg_data1['probs']
     
-    """probs_brc1 = {e: {0: probs1[e]['0']['p'], 1: probs1[e]['1']['p']} for e in edges1}
+    #"""
+    probs_brc1 = {e: {0: probs1[e]['0']['p'], 1: probs1[e]['1']['p']} for e in edges1}
     brs1, rules1, sys_res1, monitor1 = brc.run(probs_brc1, rg_data1['sys_func_conn_brc'], 
                                                max_rules=np.inf,
+                                               pf_bnd_wr = 1e-5,
                                                max_memory_gb=brc_rss_max_gb)
     brc_path1 = Path(ds_root1 / "brc")
     brc_path1_rel = brc_path1.relative_to(Path.cwd())
@@ -223,11 +226,11 @@ if __name__ == "__main__":
     
     del brs1, rules1, sys_res1, monitor1 # to not interfere with memory measurement of the next runs
     gc.collect()
-    """
+    #"""
 
     
-    edges2 = rg_data2['edges']
-    probs2 = rg_data2['probs']
+    """edges2 = rg_data2['edges']
+    probs2 = rg_data2['probs']"""
     """probs_brc2 = {e: {0: probs2[e]['0']['p'], 1: probs2[e]['1']['p']} for e in edges2}
     
     brs2, rules2, sys_res2, monitor2 = brc.run(probs_brc2, rg_data2['sys_func_conn_brc'], 
@@ -278,7 +281,7 @@ if __name__ == "__main__":
     )"""
 
     ## First example - 1OD connectivity solved by TSUM without boundary reference search
-    _ = tsum.run_rule_extraction_by_mcs(
+    """_ = tsum.run_rule_extraction_by_mcs(
         # Problem-specific callables / data
         sfun=rg_data1['sys_func_conn_tsum'],
         probs=probs,
@@ -289,10 +292,10 @@ if __name__ == "__main__":
         unk_prob_opt = 'abs',
         output_dir=ds_root1 / "tsum_conn_no_min_rule",
         min_rule_search = False
-    )
+    )"""
 
     ## First example - Global connectivity solved by TSUM without boundary reference search
-    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next runs
+    """_ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next runs
         # Problem-specific callables / data
         sfun=rg_data1['sys_func_global_conn_tsum'],
         probs=probs,
@@ -303,14 +306,14 @@ if __name__ == "__main__":
         unk_prob_opt = 'abs',
         output_dir=ds_root1 / "tsum_global_conn_no_min_rule",
         min_rule_search = False
-    )
+    )"""
 
     ## Second example - 1OD connectivity
-    row_names = list(edges2.keys())
+    """row_names = list(edges2.keys())
     n_state = 2  # binary states: 0, 1
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     probs = [[rg_data2['probs'][n]['0']['p'], rg_data2['probs'][n]['1']['p']] for n in row_names]
-    probs = torch.tensor(probs, dtype=torch.float32, device=device)
+    probs = torch.tensor(probs, dtype=torch.float32, device=device)"""
     """_ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
         # Problem-specific callables / data
         sfun=rg_data2['sys_func_conn_tsum'],
@@ -337,7 +340,7 @@ if __name__ == "__main__":
     )"""
 
     ## Second example - 1OD connectivity solved by TSUM without boundary reference search
-    _ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
+    """_ = tsum.run_rule_extraction_by_mcs( # to not interfere with memory measurement of the next run
         # Problem-specific callables / data
         sfun=rg_data2['sys_func_conn_tsum'],
         probs=probs,
@@ -348,10 +351,10 @@ if __name__ == "__main__":
         unk_prob_opt = 'abs',
         output_dir=ds_root2 / "tsum_conn_no_min_rule",
         min_rule_search = False
-    )
+    )"""
 
     ## Second example - Global connectivity solved by TSUM without boundary reference search
-    _ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
+    """_ = tsum.run_rule_extraction_by_mcs( # to not use up residence set size
         # Problem-specific callables / data
         sfun=rg_data2['sys_func_global_conn_tsum'],
         probs=probs,
@@ -362,7 +365,7 @@ if __name__ == "__main__":
         unk_prob_opt = 'abs',
         output_dir=ds_root2 / "tsum_global_no_min_rule",
         min_rule_search = False
-    )
+    )"""
 
     ## Third example - 1OD connectivity
     """edges3 = rg_data3['edges']

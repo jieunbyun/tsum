@@ -3,7 +3,7 @@
 Generated dataset (v1).
 
 ## Description
-n_nodes=120, radius=0.25, p_fail=0.05
+n_nodes=120, radius=0.12, p_fail=0.05, seed=18
 
 ## Files
 - `data/nodes.json`
@@ -14,7 +14,7 @@ n_nodes=120, radius=0.25, p_fail=0.05
 - type: `rg`
 - params: `{
   "n_nodes": 120,
-  "radius": 0.25,
+  "radius": 0.12,
   "p_fail": 0.05,
-  "seed": 7
+  "seed": 19
 }`
