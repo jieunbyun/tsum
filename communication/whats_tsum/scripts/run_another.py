@@ -208,6 +208,7 @@ def _run_example(
     save_every: int = 0,
     seed: int = 7,
     use_igraph: bool = False,
+    unk_prob_thres: float = 1e-5,
 ):
     """Common logic for all examples."""
     if use_igraph and not HAS_IGRAPH:
@@ -238,7 +239,7 @@ def _run_example(
         row_names=row_names,
         n_state=n_state,
         sys_surv_st=1,
-        unk_prob_thres=1e-5,
+        unk_prob_thres=unk_prob_thres,
         unk_prob_opt='abs',
         n_sample=n_sample,
         sample_batch_size=sample_batch_size,
@@ -275,6 +276,7 @@ _common_opts = dict(
     sample_batch_size=typer.Option(100_000, help="Samples per GPU batch. Must fit in GPU VRAM."),
     max_search_loops=typer.Option(0, help="Max batches per round for searching unknowns. 0 = use n_sample/sample_batch_size. Set e.g. 100 to cap search and avoid long empty rounds."),
     use_igraph=typer.Option(False, help="Use igraph (C-based) instead of NetworkX for connectivity. 10-100x faster. Requires: pip install python-igraph"),
+    unk_prob_thres=typer.Option(1e-5, help="Unknown probability threshold for convergence. Larger values converge faster but less accurately."),
 )
 
 
@@ -286,17 +288,18 @@ def example1(
     sample_batch_size: int = _common_opts['sample_batch_size'],
     max_search_loops: int = _common_opts['max_search_loops'],
     use_igraph: bool = _common_opts['use_igraph'],
+    unk_prob_thres: float = _common_opts['unk_prob_thres'],
     output_str: str = typer.Option("", help="str for output folder"),
 ):
     _run_example(
         name="rg1",
         gen_params={"n_nodes": 60, "radius": 0.25, "p_fail": 0.05},
-        find_connected_graph=False,
-        run_conn=False,
+        #find_connected_graph=False,
+        #run_conn=False,
         global_conn_dir="tsum_global" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
-        use_igraph=use_igraph,
+        use_igraph=use_igraph, unk_prob_thres=unk_prob_thres,
     )
 
 
@@ -308,15 +311,16 @@ def example2(
     sample_batch_size: int = _common_opts['sample_batch_size'],
     max_search_loops: int = _common_opts['max_search_loops'],
     use_igraph: bool = _common_opts['use_igraph'],
+    unk_prob_thres: float = _common_opts['unk_prob_thres'],
     output_str: str = typer.Option("", help="str for output folder"),
 ):
     _run_example(
         name="rg2",
         gen_params={"n_nodes": 120, "radius": 0.12, "p_fail": 0.05},
-        global_conn_dir="tsum_global_conn" + output_str,
+        global_conn_dir="tsum_global" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
-        use_igraph=use_igraph,
+        use_igraph=use_igraph, unk_prob_thres=unk_prob_thres,
     )
 
 
@@ -328,6 +332,7 @@ def example3(
     sample_batch_size: int = _common_opts['sample_batch_size'],
     max_search_loops: int = _common_opts['max_search_loops'],
     use_igraph: bool = _common_opts['use_igraph'],
+    unk_prob_thres: float = _common_opts['unk_prob_thres'],
     output_str: str = typer.Option("", help="str for output folder"),
 ):
     _run_example(
@@ -336,7 +341,7 @@ def example3(
         global_conn_dir="tsum_global_conn" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
-        use_igraph=use_igraph,
+        use_igraph=use_igraph, unk_prob_thres=unk_prob_thres,
     )
 
 
@@ -348,6 +353,7 @@ def example4(
     sample_batch_size: int = _common_opts['sample_batch_size'],
     max_search_loops: int = _common_opts['max_search_loops'],
     use_igraph: bool = _common_opts['use_igraph'],
+    unk_prob_thres: float = _common_opts['unk_prob_thres'],
     output_str: str = typer.Option("", help="str for output folder"),
 ):
     _run_example(
@@ -358,7 +364,7 @@ def example4(
         global_conn_dir="tsum_global_conn" + output_str,
         devices=devices, n_workers=n_workers, n_sample=n_sample,
         sample_batch_size=sample_batch_size, max_search_loops=max_search_loops,
-        use_igraph=use_igraph,
+        use_igraph=use_igraph, unk_prob_thres=unk_prob_thres,
     )
 
 
